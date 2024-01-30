@@ -30,6 +30,11 @@ export interface Entity {
     faceLeft: boolean;
     anim: Animation;
     controls: Controls;
+    goldKey: boolean;
+    silverKey: boolean;
+    bronzeKey: boolean;
+    health: number;
+    item?: "health" | "speed";
 }
 
 export function createEntity(id: string, x: number, y: number, type: EntityType): Entity {
@@ -41,7 +46,11 @@ export function createEntity(id: string, x: number, y: number, type: EntityType)
             right: false,
             up: false,
             down: false
-        }
+        },
+        goldKey: false,
+        silverKey: false,
+        bronzeKey: false,
+        health: 3,
     }
 }
 
@@ -60,7 +69,7 @@ export function updateEntity(state: GameState, entity: Entity, step: number): vo
             entity.x += speed;
         }
         let room = findRoomAt(state, entity.x, entity.y);
-        if (!room || blockedLocationInRoom(room, entity.x, entity.y)) {
+        if (!room || blockedLocationInRoom(room, entity.x, entity.y, entity.goldKey && entity.silverKey && entity.bronzeKey)) {
             entity.x = oldX;
         }
 
@@ -71,7 +80,7 @@ export function updateEntity(state: GameState, entity: Entity, step: number): vo
             entity.y += speed;
         }
         room = findRoomAt(state, entity.x, entity.y);
-        if (!room || blockedLocationInRoom(room, entity.x, entity.y)) {
+        if (!room || blockedLocationInRoom(room, entity.x, entity.y, entity.goldKey && entity.silverKey && entity.bronzeKey)) {
             entity.y = oldY;
         }
     }

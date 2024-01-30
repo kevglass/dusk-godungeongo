@@ -1,11 +1,11 @@
 import { GameState, GameUpdate } from "./logic";
-import { InputEventListener, TileSet, drawText, drawTile, fillRect, loadTileSet, popState, pushState, registerInputEventListener, scale, screenHeight, screenWidth, translate, updateGraphics } from "./renderer/graphics";
+import { InputEventListener, TileSet, drawRect, drawText, drawTile, fillCircle, fillRect, loadTileSet, popState, pushState, registerInputEventListener, scale, screenHeight, screenWidth, setAlpha, translate, updateGraphics } from "./renderer/graphics";
 import gfxTilesUrl from "./assets/tileset.png";
 import gfxDpad from "./assets/dpad.png";
 import gfxButton from "./assets/button.png";
-import { Entity, EntityType } from "./Entity";
+import { Entity, EntityType } from "./entity";
 import { intersects } from "./renderer/util";
-import { Direction, Room, inRoomSpace } from "./room";
+import { Direction, Room, findAllRoomsAt, findRoomAt, inRoomSpace } from "./room";
 import { InterpolatorLatency } from "rune-games-sdk";
 
 export class EntitySprite {
@@ -15,6 +15,11 @@ export class EntitySprite {
     constructor() {
         this.interpolator = Rune.interpolatorLatency({ maxSpeed: 10 })
     }
+}
+
+export class LocalRoom {
+    discovered = false;
+    fade = 0;
 }
 
 export class GoDungeonGo implements InputEventListener {
@@ -40,6 +45,7 @@ export class GoDungeonGo implements InputEventListener {
     up = false;
 
     entitySprites: Record<string, EntitySprite> = {};
+    localRooms: Record<number, LocalRoom> = {};
 
     constructor() {
         this.tiles = loadTileSet(gfxTilesUrl, 32, 32);
@@ -87,6 +93,13 @@ export class GoDungeonGo implements InputEventListener {
         const toRemove = Object.keys(this.entitySprites).filter(id => !this.game?.entities.find(e => e.id === id));
         for (const id of toRemove) {
             delete this.entitySprites[id];
+        }
+
+        for (const room of this.game.rooms) {
+            let local = this.localRooms[room.id];
+            if (!local) {
+                local = this.localRooms[room.id] = new LocalRoom();
+            }
         }
     }
 
@@ -250,6 +263,15 @@ export class GoDungeonGo implements InputEventListener {
         const halfX = Math.floor(room.width / 2) - 1;
         const halfY = Math.floor(room.height / 2) - 1;
 
+        if (this.game) {
+            const myEntity = this.game.entities.find(e => e.id === this.playerId)
+            if (myEntity) {
+                if (myEntity.bronzeKey && myEntity.goldKey && myEntity.silverKey) {
+                    setAlpha(0.5);
+                }
+            }
+        }
+
         // north door
         if (room.connections[Direction.NORTH]) {
             drawTile(this.tiles, halfX * 32, 0, 64);
@@ -258,6 +280,11 @@ export class GoDungeonGo implements InputEventListener {
             drawTile(this.tiles, (halfX + 1) * 32, -32, 64);
             drawTile(this.tiles, (halfX - 1) * 32, -32, 128);
             drawTile(this.tiles, (halfX + 2) * 32, -32, 129);
+
+            if (room.doors[Direction.NORTH]) {
+                drawTile(this.tiles, halfX * 32, -32, 12);
+                drawTile(this.tiles, (halfX + 1) * 32, -32, 13);
+            }
         }
         // south door
         if (room.connections[Direction.SOUTH]) {
@@ -267,6 +294,11 @@ export class GoDungeonGo implements InputEventListener {
             drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32), 64);
             drawTile(this.tiles, (halfX - 1) * 32, (room.height * 32), 128);
             drawTile(this.tiles, (halfX + 2) * 32, (room.height * 32), 129);
+
+            if (room.doors[Direction.SOUTH]) {
+                drawTile(this.tiles, halfX * 32, (room.height * 32) + 32, 12);
+                drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32) + 32, 13);
+            }
         }
         // west door
         if (room.connections[Direction.WEST]) {
@@ -279,6 +311,12 @@ export class GoDungeonGo implements InputEventListener {
             drawTile(this.tiles, -32, (halfY * 32) - 64, 0);
             drawTile(this.tiles, -32, (halfY * 32) + 38, 0);
             drawTile(this.tiles, -32, (halfY * 32) + 70, 16);
+
+            if (room.doors[Direction.WEST]) {
+                drawTile(this.tiles, -48, (halfY * 32) - 31, 14);
+                drawTile(this.tiles, -48, (halfY * 32) + 1, 30);
+                drawTile(this.tiles, -48, (halfY * 32) + 33, 46);
+            }
         }
         // east door
         if (room.connections[Direction.EAST]) {
@@ -293,6 +331,36 @@ export class GoDungeonGo implements InputEventListener {
 
             drawTile(this.tiles, room.width * 32, (halfY * 32) + 38, 0);
             drawTile(this.tiles, room.width * 32, (halfY * 32) + 70, 16);
+            if (room.doors[Direction.EAST]) {
+                drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) - 31, 14);
+                drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) + 1, 30);
+                drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) + 33, 46);
+            }
+        }
+
+        setAlpha(1);
+
+        if (room.item === "treasure") {
+            drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 6);
+        }
+        if (room.item === "speed") {
+            drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 28);
+        }
+        if (room.item === "health") {
+            drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 27);
+        }
+        if (room.item === "bronze") {
+            drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 11);
+        }
+        if (room.item === "silver") {
+            drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 10);
+        }
+        if (room.item === "gold") {
+            drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 9);
+        }
+        if (room.item === "egg") {
+            drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16) - 32, 22);
+            drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 38);
         }
 
         // debug for room locations
@@ -315,7 +383,6 @@ export class GoDungeonGo implements InputEventListener {
         // let the graphics do whatever it wants to do
         updateGraphics();
 
-        drawText(0, 20, "Joined: " + this.joined, 20, "white");
         if (this.game) {
             if (this.joined) {
                 // simple player camera tracking
@@ -323,37 +390,108 @@ export class GoDungeonGo implements InputEventListener {
                 if (myEntity) {
                     this.viewX = myEntity.x - (screenWidth() / 2);
                     this.viewY = myEntity.y - (screenHeight() * 0.4);
+
+                    for (const room of findAllRoomsAt(this.game, myEntity.x, myEntity.y)) {
+                        const localRoom = this.localRooms[room.id];
+                        localRoom.discovered = true;
+                    }
+                }
+
+                for (const room of Object.values(this.localRooms)) {
+                    if (room.discovered && room.fade < 1) {
+                        room.fade += 0.1;
+                    }
                 }
 
                 pushState();
                 translate(-this.viewX, -this.viewY);
 
                 for (const room of this.game.rooms) {
-                    this.drawRoom(room);
+                    const localRoom = this.localRooms[room.id];
+                    if (localRoom && localRoom.discovered) {
+                        setAlpha(localRoom.fade);
+                        this.drawRoom(room);
+                        setAlpha(1);
+                    }
                 }
                 for (const entity of this.game.entities) {
-                    const sprite = this.entitySprites[entity.id];
+                    const room = findRoomAt(this.game, entity.x, entity.y);
+                    if (room) {
+                        const localRoom = this.localRooms[room.id];
+                        if (localRoom && localRoom.discovered) {
+                            const sprite = this.entitySprites[entity.id];
 
-                    sprite.frame += 0.1;
-                    if (sprite.frame >= entity.anim.count) {
-                        sprite.frame = 0;
+                            sprite.frame += 0.1;
+                            if (sprite.frame >= entity.anim.count) {
+                                sprite.frame = 0;
+                            }
+
+                            pushState();
+                            translate(sprite.interpolator.getPosition()[0] - 16, sprite.interpolator.getPosition()[1] - 32);
+                            if (entity.faceLeft) {
+                                scale(-1, 1);
+                                translate(-32, 0);
+                            }
+
+                            drawTile(this.tiles, 0, -32, entity.type + Math.floor(entity.anim.base + sprite.frame));
+                            drawTile(this.tiles, 0, 0, entity.type + 16 + Math.floor(entity.anim.base + sprite.frame));
+
+                            popState();
+                        }
                     }
-
-                    pushState();
-                    translate(sprite.interpolator.getPosition()[0] - 16, sprite.interpolator.getPosition()[1] - 32);
-                    if (entity.faceLeft) {
-                        scale(-1, 1);
-                        translate(-32, 0);
-                    }
-
-                    drawTile(this.tiles, 0, -32, entity.type + Math.floor(entity.anim.base + sprite.frame));
-                    drawTile(this.tiles, 0, 0, entity.type + 16 + Math.floor(entity.anim.base + sprite.frame));
-
-                    popState();
                 }
 
                 popState();
 
+                // render mini map
+                if (this.game) {
+                    pushState();
+
+                    const myEntity = this.game.entities.find(e => e.id === this.playerId)
+                    if (myEntity) {
+                        scale(1.5, 1.5);
+                        fillRect(0, 0, 84, 84, "rgba(0,0,0,0.5)");
+                        translate(42, 42);
+                        for (const room of this.game.rooms) {
+                            // if (room.discovered) {
+                            let col = "rgba(255,255,255,0.5)";
+                            if (room.item === "bronze") {
+                                col = "rgba(255,155,0,0.8)";
+                            }
+                            if (room.item === "silver") {
+                                col = "rgba(240,240,255,0.8)";
+                            }
+                            if (room.item === "gold") {
+                                col = "rgba(255,255,0,0.8)";
+                            }
+                            fillRect(room.x, room.y, room.width, room.height, col);
+                            if (room.connections[Direction.NORTH]) {
+                                fillRect(room.x + (room.width / 2) - 2, room.y - 2, 4, 2, room.doors[Direction.NORTH] ? "rgb(255,255,0)" : "rgb(200,200,200)");
+                            }
+                            if (room.connections[Direction.SOUTH]) {
+                                fillRect(room.x + (room.width / 2) - 2, room.y + room.height, 4, 2, room.doors[Direction.SOUTH] ? "rgb(255,255,0)" : "rgb(200,200,200)");
+                            }
+                            if (room.connections[Direction.WEST]) {
+                                fillRect(room.x - 2, room.y + (room.height / 2) - 2, 2, 4, room.doors[Direction.WEST] ? "rgb(255,255,0)" : "rgb(200,200,200)");
+                            }
+                            if (room.connections[Direction.EAST]) {
+                                fillRect(room.x + room.width, room.y + (room.height / 2) - 2, 2, 4, room.doors[Direction.EAST] ? "rgb(255,255,0)" : "rgb(200,200,200)");
+                            }
+                            // }
+                        }
+
+                        for (const entity of this.game.entities) {
+                            const room = findRoomAt(this.game, entity.x, entity.y);
+                            if (room && room.discovered) {
+                                const localRoom = this.localRooms[room.id];
+                                if (localRoom) {
+                                    fillCircle(Math.floor(entity.x / 32), Math.floor(entity.y / 32), 1.5, entity === myEntity ? "white" : "black");
+                                }
+                            }
+                        }
+                    }
+                    popState();
+                }
 
                 // render game controls
                 pushState();
@@ -361,6 +499,30 @@ export class GoDungeonGo implements InputEventListener {
                 drawTile(this.dpad, this.controlHorizontalPadding, 0, 0, this.controlSize, this.controlSize);
                 drawTile(this.button, screenWidth() - this.controlSize - this.controlHorizontalPadding, 0, 0, this.controlSize, this.controlSize);
                 popState();
+
+                if (this.game) {
+                    const myEntity = this.game.entities.find(e => e.id === this.playerId)
+                    if (myEntity) {
+                        // keys
+                        let offset = 16;
+                        if (myEntity.bronzeKey) {
+                            drawTile(this.tiles, screenWidth() - offset, 34, 47);
+                            offset+=16;
+                        }
+                        if (myEntity.silverKey) {
+                            drawTile(this.tiles, screenWidth() - offset, 34, 31);
+                            offset+=16;
+                        }
+                        if (myEntity.goldKey) {
+                            drawTile(this.tiles, screenWidth() - offset, 34, 15);
+                            offset+=16;
+                        }
+
+                        for (let i=0;i<3;i++) {
+                            drawTile(this.tiles, screenWidth() - 32 - (i*32), 0, i < myEntity.health ? 7 : 8);
+                        }
+                    }
+                }
             }
         }
 

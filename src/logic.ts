@@ -1,6 +1,6 @@
 import type { OnChangeAction, OnChangeEvent, PlayerId, Players, RuneClient } from "rune-games-sdk/multiplayer"
-import { Controls, Entity, EntityType, IDLE, RUN, createEntity, updateEntity } from "./Entity";
-import { Room, generateDungeon } from "./room";
+import { Controls, Entity, EntityType, IDLE, RUN, createEntity, updateEntity } from "./entity";
+import { Room, closeToCenter, findAllRoomsAt, findRoomAt, generateDungeon } from "./room";
 
 // Quick type so I can pass the complex object that is the 
 // Rune onChange blob around without ugliness. 
@@ -18,6 +18,7 @@ export type GameUpdate = {
 export interface GameState {
   entities: Entity[];
   rooms: Room[];
+  startRoom: number;
 }
 
 type GameActions = {
@@ -30,10 +31,14 @@ declare global {
 }
 
 function createPlayerEntity(state: GameState, playerId: string, type: EntityType) {
-  const x = ((state.rooms[0].x + 2) * 32) + (Math.random() * (state.rooms[0].width - 4) * 32);
-  const y = ((state.rooms[0].y + 2) * 32) + (Math.random() * (state.rooms[0].height - 4) * 32);
+  const startRoom = state.rooms.find(r => r.id === state.startRoom);
 
-  state.entities.push(createEntity(playerId, x, y, type));
+  if (startRoom) {
+    const x = ((startRoom.x + 2) * 32) + (Math.random() * (startRoom.width - 4) * 32);
+    const y = ((startRoom.y + 2) * 32) + (Math.random() * (startRoom.height - 4) * 32);
+
+    state.entities.push(createEntity(playerId, x, y, type));
+  }
 }
 
 Rune.initLogic({
@@ -42,7 +47,8 @@ Rune.initLogic({
   setup: (): GameState => {
     const initialState = {
       entities: [],
-      rooms: []
+      rooms: [],
+      startRoom: 0
     }
 
     generateDungeon(initialState);
@@ -78,8 +84,26 @@ Rune.initLogic({
   },
   update: (context) => {
     for (const entity of context.game.entities) {
-      for (let i=0;i<4;i++) {
+      for (let i = 0; i < 4; i++) {
         updateEntity(context.game, entity, 0.25);
+        const room = findRoomAt(context.game, entity.x, entity.y);
+        if (room) {
+          room.discovered = true;
+          if (room.item) {
+            if (closeToCenter(room, entity.x, entity.y)) {
+              // intersect with the item in the room
+              if (room.item === "bronze") {
+                entity.bronzeKey = true;
+              }
+              if (room.item === "silver") {
+                entity.silverKey = true;
+              }
+              if (room.item === "gold") {
+                entity.goldKey = true;
+              }
+            }
+          }
+        }
       }
     }
   }
