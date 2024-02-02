@@ -1,19 +1,66 @@
 import { GameState, GameUpdate } from "./logic";
-import { InputEventListener, TileSet, drawRect, drawText, drawTile, fillCircle, fillRect, loadTileSet, popState, pushState, registerInputEventListener, scale, screenHeight, screenWidth, setAlpha, translate, updateGraphics } from "./renderer/graphics";
+import { InputEventListener, TileSet, drawImage, drawRect, drawText, drawTile, fillCircle, fillRect, halfCircle, loadImage, loadTileSet, popState, pushState, registerInputEventListener, scale, screenHeight, screenWidth, setAlpha, stringWidth, translate, updateGraphics } from "./renderer/graphics";
 import gfxTilesUrl from "./assets/tileset.png";
 import gfxDpad from "./assets/dpad.png";
 import gfxButton from "./assets/button.png";
 import { Entity, EntityType } from "./entity";
 import { intersects } from "./renderer/util";
 import { Direction, Room, findAllRoomsAt, findRoomAt, inRoomSpace } from "./room";
-import { InterpolatorLatency } from "rune-games-sdk";
+import { InterpolatorLatency, Players } from "rune-games-sdk";
+
+const PUFF_TIME = 250;
+const PUFF_COLORS = [
+    "rgba(255,255,255,0.5)",
+    "rgba(230,230,230,0.5)",
+    "rgba(200,200,200,0.5)",
+    "rgba(180,180,180,0.5)"
+];
+const SPEED_PUFF_COLORS = [
+    "rgba(100,100,255,0.7)",
+    "rgba(100,100,230,0.7)",
+    "rgba(100,100,200,0.7)",
+    "rgba(100,100,180,0.7)"
+];
+
+interface Puff {
+    x: number;
+    y: number;
+    dieAt: number;
+    size: number;
+    offset: number;
+    col: string;
+    speedCol: string;
+}
 
 export class EntitySprite {
     frame = 0;
     interpolator: InterpolatorLatency<number[]>
+    lastFrames: Puff[] = [];
+    lastX = -1;
+    lastY = -1;
 
     constructor() {
-        this.interpolator = Rune.interpolatorLatency({ maxSpeed: 10 })
+        this.interpolator = Rune.interpolatorLatency({ maxSpeed: 15 })
+    }
+
+    update(x: number, y: number) {
+        if (this.lastX !== x || this.lastY !== y) {
+            this.lastFrames.push({
+                x: (x + this.lastX) / 2, y: (y + this.lastY) / 2, dieAt: Rune.gameTime() + PUFF_TIME,
+                size: 5 + Math.floor(Math.random() * 7), offset: -1 + Math.floor(Math.random() * 3),
+                speedCol: SPEED_PUFF_COLORS[Math.floor(Math.random() * PUFF_COLORS.length)],
+                col: PUFF_COLORS[Math.floor(Math.random() * PUFF_COLORS.length)]
+            });
+            this.lastFrames.push({
+                x: x, y: y, dieAt: Rune.gameTime() + PUFF_TIME,
+                size: 5 + Math.floor(Math.random() * 7), offset: -1 + Math.floor(Math.random() * 3),
+                speedCol: SPEED_PUFF_COLORS[Math.floor(Math.random() * PUFF_COLORS.length)],
+                col: PUFF_COLORS[Math.floor(Math.random() * PUFF_COLORS.length)]
+            });
+        }
+        this.lastFrames = this.lastFrames.filter(f => f.dieAt > Rune.gameTime());
+        this.lastX = x;
+        this.lastY = y;
     }
 }
 
@@ -47,6 +94,9 @@ export class GoDungeonGo implements InputEventListener {
     entitySprites: Record<string, EntitySprite> = {};
     localRooms: Record<number, LocalRoom> = {};
 
+    players?: Players;
+    avatarImages: Record<string, HTMLImageElement> = {}
+    
     constructor() {
         this.tiles = loadTileSet(gfxTilesUrl, 32, 32);
         this.dpad = loadTileSet(gfxDpad, 80, 80);
@@ -71,6 +121,13 @@ export class GoDungeonGo implements InputEventListener {
         // do nothing
         this.game = update.game;
         this.playerId = update.yourPlayerId;
+        this.players = update.players;
+
+        for (const playerId in update.players) {
+            if (!this.avatarImages[playerId]) {
+                this.avatarImages[playerId] = loadImage(update.players[playerId].avatarUrl);
+            }
+        }
 
         for (const entity of this.game.entities) {
             let sprite = this.entitySprites[entity.id];
@@ -152,6 +209,10 @@ export class GoDungeonGo implements InputEventListener {
                 this.touchInDpad = index;
                 this.processDPad(x, y);
             }
+
+            if (intersects(x, y, screenWidth() - this.controlSize - this.controlHorizontalPadding, controlsY, this.controlSize, this.controlSize)) {
+                Rune.actions.useItem();
+            }
         }
     }
 
@@ -201,6 +262,9 @@ export class GoDungeonGo implements InputEventListener {
                     (myEntity.controls.up !== this.up) || (myEntity.controls.down !== this.down))) {
                     Rune.actions.applyControls({ left: this.left, right: this.right, up: this.up, down: this.down });
                 }
+                if (key === " ") {
+                    Rune.actions.useItem();
+                }
             }
         }
     }
@@ -230,6 +294,12 @@ export class GoDungeonGo implements InputEventListener {
     }
 
     drawRoom(room: Room): void {
+        let myEntity: Entity | undefined;
+
+        if (this.game) {
+            myEntity = this.game.entities.find(e => e.id === this.playerId)
+        }
+
         pushState();
         translate(room.x * 32, room.y * 32);
         for (let x = 0; x < room.width; x++) {
@@ -263,14 +333,7 @@ export class GoDungeonGo implements InputEventListener {
         const halfX = Math.floor(room.width / 2) - 1;
         const halfY = Math.floor(room.height / 2) - 1;
 
-        if (this.game) {
-            const myEntity = this.game.entities.find(e => e.id === this.playerId)
-            if (myEntity) {
-                if (myEntity.bronzeKey && myEntity.goldKey && myEntity.silverKey) {
-                    setAlpha(0.5);
-                }
-            }
-        }
+        const hasAllKeys = myEntity?.bronzeKey && myEntity?.goldKey && myEntity?.silverKey
 
         // north door
         if (room.connections[Direction.NORTH]) {
@@ -281,9 +344,17 @@ export class GoDungeonGo implements InputEventListener {
             drawTile(this.tiles, (halfX - 1) * 32, -32, 128);
             drawTile(this.tiles, (halfX + 2) * 32, -32, 129);
 
+            if (this.game?.atStart) {
+                drawTile(this.tiles, halfX * 32, -32, 45);
+                drawTile(this.tiles, (halfX + 1) * 32, -32, 45);
+            }
             if (room.doors[Direction.NORTH]) {
+                if (hasAllKeys) {
+                    setAlpha(0.5);
+                }
                 drawTile(this.tiles, halfX * 32, -32, 12);
                 drawTile(this.tiles, (halfX + 1) * 32, -32, 13);
+                setAlpha(1);
             }
         }
         // south door
@@ -295,9 +366,17 @@ export class GoDungeonGo implements InputEventListener {
             drawTile(this.tiles, (halfX - 1) * 32, (room.height * 32), 128);
             drawTile(this.tiles, (halfX + 2) * 32, (room.height * 32), 129);
 
+            if (this.game?.atStart) {
+                drawTile(this.tiles, halfX * 32, (room.height * 32), 45);
+                drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32), 45);
+            }
             if (room.doors[Direction.SOUTH]) {
+                if (hasAllKeys) {
+                    setAlpha(0.5);
+                }
                 drawTile(this.tiles, halfX * 32, (room.height * 32) + 32, 12);
                 drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32) + 32, 13);
+                setAlpha(1);
             }
         }
         // west door
@@ -312,10 +391,19 @@ export class GoDungeonGo implements InputEventListener {
             drawTile(this.tiles, -32, (halfY * 32) + 38, 0);
             drawTile(this.tiles, -32, (halfY * 32) + 70, 16);
 
+            if (this.game?.atStart) {
+                drawTile(this.tiles, -32, (halfY * 32) - 31, 61);
+                drawTile(this.tiles, -32, (halfY * 32) + 1, 61);
+                drawTile(this.tiles, -32, (halfY * 32) + 33, 61);
+            }
             if (room.doors[Direction.WEST]) {
+                if (hasAllKeys) {
+                    setAlpha(0.5);
+                }
                 drawTile(this.tiles, -48, (halfY * 32) - 31, 14);
                 drawTile(this.tiles, -48, (halfY * 32) + 1, 30);
                 drawTile(this.tiles, -48, (halfY * 32) + 33, 46);
+                setAlpha(1);
             }
         }
         // east door
@@ -331,14 +419,23 @@ export class GoDungeonGo implements InputEventListener {
 
             drawTile(this.tiles, room.width * 32, (halfY * 32) + 38, 0);
             drawTile(this.tiles, room.width * 32, (halfY * 32) + 70, 16);
+
+            if (this.game?.atStart) {
+                drawTile(this.tiles, (room.width * 32), (halfY * 32) - 31, 61);
+                drawTile(this.tiles, (room.width * 32), (halfY * 32) + 1, 61);
+                drawTile(this.tiles, (room.width * 32), (halfY * 32) + 33, 61);
+            }
+
             if (room.doors[Direction.EAST]) {
+                if (hasAllKeys) {
+                    setAlpha(0.5);
+                }
                 drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) - 31, 14);
                 drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) + 1, 30);
                 drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) + 33, 46);
+                setAlpha(1);
             }
         }
-
-        setAlpha(1);
 
         if (room.item === "treasure") {
             drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 6);
@@ -349,13 +446,13 @@ export class GoDungeonGo implements InputEventListener {
         if (room.item === "health") {
             drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 27);
         }
-        if (room.item === "bronze") {
+        if (room.item === "bronze" && !myEntity?.bronzeKey) {
             drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 11);
         }
-        if (room.item === "silver") {
+        if (room.item === "silver" && !myEntity?.silverKey) {
             drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 10);
         }
-        if (room.item === "gold") {
+        if (room.item === "gold" && !myEntity?.goldKey) {
             drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 9);
         }
         if (room.item === "egg") {
@@ -407,6 +504,14 @@ export class GoDungeonGo implements InputEventListener {
                 translate(-this.viewX, -this.viewY);
 
                 for (const room of this.game.rooms) {
+                    if (myEntity) {
+                        const dx = Math.abs((room.x * 32) - myEntity.x)
+                        const dy = Math.abs((room.y * 32) - myEntity.y);
+                        if (dx > screenWidth() * 2 || dy > screenHeight() * 2) {
+                            continue;
+                        }
+                    }
+
                     const localRoom = this.localRooms[room.id];
                     if (localRoom && localRoom.discovered) {
                         setAlpha(localRoom.fade);
@@ -420,6 +525,7 @@ export class GoDungeonGo implements InputEventListener {
                         const localRoom = this.localRooms[room.id];
                         if (localRoom && localRoom.discovered) {
                             const sprite = this.entitySprites[entity.id];
+                            sprite.update(sprite.interpolator.getPosition()[0], sprite.interpolator.getPosition()[1]);
 
                             sprite.frame += 0.1;
                             if (sprite.frame >= entity.anim.count) {
@@ -427,6 +533,16 @@ export class GoDungeonGo implements InputEventListener {
                             }
 
                             pushState();
+                            for (const puff of sprite.lastFrames) {
+                                const remaining = puff.dieAt - Rune.gameTime();
+                                if (remaining > PUFF_TIME * 0.9) {
+                                    continue;
+                                }
+                                const scale = remaining / PUFF_TIME;
+                                setAlpha(scale);
+                                halfCircle(puff.x - puff.offset, puff.y - puff.offset, puff.size, entity.speed > 10 ? puff.speedCol : puff.col);
+                                setAlpha(1);
+                            }
                             translate(sprite.interpolator.getPosition()[0] - 16, sprite.interpolator.getPosition()[1] - 32);
                             if (entity.faceLeft) {
                                 scale(-1, 1);
@@ -444,7 +560,7 @@ export class GoDungeonGo implements InputEventListener {
                 popState();
 
                 // render mini map
-                if (this.game) {
+                if (this.game && !this.game.atStart) {
                     pushState();
 
                     const myEntity = this.game.entities.find(e => e.id === this.playerId)
@@ -453,31 +569,31 @@ export class GoDungeonGo implements InputEventListener {
                         fillRect(0, 0, 84, 84, "rgba(0,0,0,0.5)");
                         translate(42, 42);
                         for (const room of this.game.rooms) {
-                            // if (room.discovered) {
-                            let col = "rgba(255,255,255,0.5)";
-                            if (room.item === "bronze") {
-                                col = "rgba(255,155,0,0.8)";
+                            if (room.discovered) {
+                                let col = "rgba(255,255,255,0.5)";
+                                if (room.item === "bronze") {
+                                    col = "rgba(255,155,0,0.8)";
+                                }
+                                if (room.item === "silver") {
+                                    col = "rgba(240,240,255,0.8)";
+                                }
+                                if (room.item === "gold") {
+                                    col = "rgba(255,255,0,0.8)";
+                                }
+                                fillRect(room.x, room.y, room.width, room.height, col);
+                                if (room.connections[Direction.NORTH]) {
+                                    fillRect(room.x + (room.width / 2) - 2, room.y - 2, 4, 2, room.doors[Direction.NORTH] ? "rgb(255,255,0)" : "rgb(200,200,200)");
+                                }
+                                if (room.connections[Direction.SOUTH]) {
+                                    fillRect(room.x + (room.width / 2) - 2, room.y + room.height, 4, 2, room.doors[Direction.SOUTH] ? "rgb(255,255,0)" : "rgb(200,200,200)");
+                                }
+                                if (room.connections[Direction.WEST]) {
+                                    fillRect(room.x - 2, room.y + (room.height / 2) - 2, 2, 4, room.doors[Direction.WEST] ? "rgb(255,255,0)" : "rgb(200,200,200)");
+                                }
+                                if (room.connections[Direction.EAST]) {
+                                    fillRect(room.x + room.width, room.y + (room.height / 2) - 2, 2, 4, room.doors[Direction.EAST] ? "rgb(255,255,0)" : "rgb(200,200,200)");
+                                }
                             }
-                            if (room.item === "silver") {
-                                col = "rgba(240,240,255,0.8)";
-                            }
-                            if (room.item === "gold") {
-                                col = "rgba(255,255,0,0.8)";
-                            }
-                            fillRect(room.x, room.y, room.width, room.height, col);
-                            if (room.connections[Direction.NORTH]) {
-                                fillRect(room.x + (room.width / 2) - 2, room.y - 2, 4, 2, room.doors[Direction.NORTH] ? "rgb(255,255,0)" : "rgb(200,200,200)");
-                            }
-                            if (room.connections[Direction.SOUTH]) {
-                                fillRect(room.x + (room.width / 2) - 2, room.y + room.height, 4, 2, room.doors[Direction.SOUTH] ? "rgb(255,255,0)" : "rgb(200,200,200)");
-                            }
-                            if (room.connections[Direction.WEST]) {
-                                fillRect(room.x - 2, room.y + (room.height / 2) - 2, 2, 4, room.doors[Direction.WEST] ? "rgb(255,255,0)" : "rgb(200,200,200)");
-                            }
-                            if (room.connections[Direction.EAST]) {
-                                fillRect(room.x + room.width, room.y + (room.height / 2) - 2, 2, 4, room.doors[Direction.EAST] ? "rgb(255,255,0)" : "rgb(200,200,200)");
-                            }
-                            // }
                         }
 
                         for (const entity of this.game.entities) {
@@ -497,29 +613,86 @@ export class GoDungeonGo implements InputEventListener {
                 pushState();
                 translate(0, screenHeight() - this.controlSize - this.controlVerticalPadding);
                 drawTile(this.dpad, this.controlHorizontalPadding, 0, 0, this.controlSize, this.controlSize);
+
                 drawTile(this.button, screenWidth() - this.controlSize - this.controlHorizontalPadding, 0, 0, this.controlSize, this.controlSize);
+                if (this.game) {
+                    const myEntity = this.game.entities.find(e => e.id === this.playerId);
+                    if (myEntity) {
+                        const offset = (this.controlSize - 32) / 2;
+                        if (myEntity.item === "speed") {
+                            drawTile(this.tiles, screenWidth() - this.controlSize - this.controlHorizontalPadding + offset, offset, 28);
+                        }
+                        if (myEntity.item === "health") {
+                            drawTile(this.tiles, screenWidth() - this.controlSize - this.controlHorizontalPadding + offset, offset, 27);
+                        }
+                    }
+                }
                 popState();
 
-                if (this.game) {
+                // render score board when at start
+                if (this.game && this.players && this.game.atStart) {
+                    let item = 0;
+                    const scores = [];
+
+                    for (const playerId in this.game.scores) {
+                        scores.push({ ...this.players[playerId], score: this.game.scores[playerId] });
+                    }
+
+                    scores.sort((a, b) => b.score - a.score);
+
+                    for (const score of scores) {
+                        fillRect(0, 1+(item *34), screenWidth(), 32, item % 2 === 0 ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.1)");
+                        drawImage(this.avatarImages[score.playerId], 0, (item*34)+1, 32, 32);
+                        drawText(40, 25 + (item * 34), score.displayName, 20, "white");
+                        drawText(screenWidth() - stringWidth(""+score.score, 20) - 20, 25 + (item * 34), ""+score.score, 20, "white");
+                        item++;
+                    }
+                }
+
+                // draw the status message
+                if (this.game.atStart) {
+                    fillRect(0, 130, screenWidth(), 100, "rgba(0,0,0,0.5)");
+                    drawText(Math.floor(screenWidth() - stringWidth(this.game.statusMessage, 20)) / 2, 160, this.game.statusMessage, 20, "white");
+                    if (this.game.countDown > 0) {
+                        drawText(Math.floor(screenWidth() - stringWidth(this.game.countDown+"", 50)) / 2, 220, this.game.countDown+"", 50, "white");
+                    }
+                } else if (Rune.gameTime() - this.game.startRace < 1000 && Rune.gameTime() - this.game.startRace > 0) {
+                    fillRect(0, 130, screenWidth(), 100, "rgba(0,0,0,0.5)");
+                    drawText(Math.floor(screenWidth() - stringWidth("First to the Egg!", 20)) / 2, 160, "First to the Egg!", 20, "#ee8e2e");
+                    drawText(Math.floor(screenWidth() - stringWidth("GO!", 50)) / 2, 220, "GO!", 50, "#4ba747");
+                }
+                // draw the HUD for keys and health
+                if (this.game && !this.game.atStart) {
+                    const remaining = Math.max(0, this.game.endGameTime - Rune.gameTime());
+                    const seconds = Math.floor(remaining / 1000) % 60;
+                    const minutes = Math.floor(Math.floor(remaining / 1000) / 60);
+                    let timeStr = minutes+":";
+                    if (seconds < 10) {
+                        timeStr += "0";
+                    }
+                    timeStr += seconds;
+
+                    drawText(Math.floor(screenWidth() - stringWidth(timeStr, 20)) / 2, 20, timeStr, 20, "white");
+
                     const myEntity = this.game.entities.find(e => e.id === this.playerId)
                     if (myEntity) {
                         // keys
                         let offset = 16;
                         if (myEntity.bronzeKey) {
                             drawTile(this.tiles, screenWidth() - offset, 34, 47);
-                            offset+=16;
+                            offset += 16;
                         }
                         if (myEntity.silverKey) {
                             drawTile(this.tiles, screenWidth() - offset, 34, 31);
-                            offset+=16;
+                            offset += 16;
                         }
                         if (myEntity.goldKey) {
                             drawTile(this.tiles, screenWidth() - offset, 34, 15);
-                            offset+=16;
+                            offset += 16;
                         }
 
-                        for (let i=0;i<3;i++) {
-                            drawTile(this.tiles, screenWidth() - 32 - (i*32), 0, i < myEntity.health ? 7 : 8);
+                        for (let i = 0; i < 3; i++) {
+                            drawTile(this.tiles, screenWidth() - 32 - (i * 32), 0, i < myEntity.health ? 7 : 8);
                         }
                     }
                 }

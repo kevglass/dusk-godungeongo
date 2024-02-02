@@ -123,7 +123,7 @@ export function generateDungeon(state: GameState): void {
     });
 
     eggRoom.item = "egg";
-    let toPlace: ((room: Room) => void)[] = [
+    const toPlace: ((room: Room) => void)[] = [
         (room: Room) => { room.item = "bronze" },
         (room: Room) => { room.item = "silver" },
         (room: Room) => { room.item = "gold" },
@@ -224,13 +224,17 @@ export function inRoomSpace(room: Room, x: number, y: number) {
     return (x >= room.x - 1) && (x < room.x + room.width + 1) && (y >= room.y - 1) && (y < room.y + room.height + 1);
 }
 
-export function blockedLocationInRoom(room: Room, x: number, y: number, hasAllKeys: boolean) {
+export function blockedLocationInRoom(atStart: boolean, room: Room, x: number, y: number, hasAllKeys: boolean) {
     // convert to tile space
     x = x / 32;
     y = y / 32;
 
     if (x >= room.x + 0.5 && y >= room.y + 1.1 && x < room.x + room.width - 0.4 && y < room.y + room.height - 0.2) {
         return false;
+    }
+
+    if (atStart) {
+        return true;
     }
 
     const halfX = room.x + Math.floor(room.width / 2) - 1;

@@ -106,6 +106,13 @@ export function screenHeight(): number {
     return canvas.height;
 }
 
+export function loadImage(url: string): HTMLImageElement {
+    const image = new Image();
+    image.src = url
+    
+    return image;
+}
+
 // load an image and store it with tileset information
 export function loadTileSet(url: string, tw: number, th: number): TileSet {
     const image = new Image();
@@ -201,5 +208,12 @@ export function fillCircle(x: number, y: number, radius: number, col: string): v
     ctx.fillStyle = col;
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+}
+
+export function halfCircle(x: number, y: number, radius: number, col: string): void {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, Math.PI, 0);
     ctx.fill();
 }

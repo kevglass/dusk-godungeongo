@@ -19,15 +19,31 @@ export interface GameState {
   entities: Entity[];
   rooms: Room[];
   startRoom: number;
+  scores: Record<string, number>;
+  atStart: boolean;
+  startRace: number;
+  winner?: string;
+  statusMessage: string;
+  countDown: number;
+  endGameTime: number;
 }
 
 type GameActions = {
   join: (params: { type: EntityType }) => void;
   applyControls: (controls: Controls) => void;
+  useItem: () => void;
 }
 
 declare global {
   const Rune: RuneClient<GameState, GameActions>
+}
+
+export function getPlayerCount(state: GameState) {
+  return state.entities.filter(e => e.type !== EntityType.MONSTER).length;
+}
+
+export function getWinner(state: GameState) {
+
 }
 
 function createPlayerEntity(state: GameState, playerId: string, type: EntityType) {
@@ -41,6 +57,27 @@ function createPlayerEntity(state: GameState, playerId: string, type: EntityType
   }
 }
 
+function startGame(state: GameState) {
+  state.winner = undefined;
+  state.atStart = true;
+
+  const existingPlayers = state.entities.filter(e => e.type !== EntityType.MONSTER);
+  state.entities = [];
+  state.rooms = [];
+  state.startRoom = 0;
+  state.startRace = 0;
+  state.countDown = -1;
+  state.endGameTime = 0;
+
+  generateDungeon(state);
+
+  for (const player of existingPlayers) {
+    createPlayerEntity(state, player.id, player.type);
+  }
+
+  state.statusMessage = "Waiting for Players!";
+}
+
 Rune.initLogic({
   minPlayers: 1,
   maxPlayers: 4,
@@ -48,10 +85,16 @@ Rune.initLogic({
     const initialState = {
       entities: [],
       rooms: [],
-      startRoom: 0
+      startRoom: 0,
+      scores: {},
+      atStart: true,
+      startRace: 0,
+      statusMessage: "",
+      countDown: -1,
+      endGameTime: 0,
     }
 
-    generateDungeon(initialState);
+    startGame(initialState);
 
     return initialState;
   },
@@ -59,6 +102,7 @@ Rune.initLogic({
   actions: {
     join: (params: { type: EntityType }, context) => {
       createPlayerEntity(context.game, context.playerId, params.type);
+      context.game.scores[context.playerId] = 0;
     },
     applyControls: (controls: Controls, context) => {
       const playerEntity = context.game.entities.find(e => e.id === context.playerId);
@@ -80,26 +124,85 @@ Rune.initLogic({
           playerEntity.faceLeft = false;
         }
       }
+    },
+    useItem(params, context) {
+      const playerEntity = context.game.entities.find(e => e.id === context.playerId);
+      if (playerEntity) {
+        if (playerEntity.item === "health") {
+          playerEntity.item = undefined;
+          playerEntity.health = Math.min(3, playerEntity.health + 1);
+        }
+        if (playerEntity.item === "speed") {
+          playerEntity.speedTimeout = Rune.gameTime() + (1000 * 15);
+          playerEntity.speed = 15;
+          playerEntity.item = undefined;
+        }
+      }
+    },
+  },
+  events: {
+    playerJoined(playerId, context) {
+      // we don't need to do anything until they select a character type
     }
   },
   update: (context) => {
-    for (const entity of context.game.entities) {
-      for (let i = 0; i < 4; i++) {
-        updateEntity(context.game, entity, 0.25);
+    if (context.game.atStart && getPlayerCount(context.game) > 0) {
+      // start the kick off timer
+      if (context.game.startRace === 0) {
+        context.game.startRace = Rune.gameTime() + 5000;
+      } else {
+        const remaining = context.game.startRace - Rune.gameTime();
+        if (remaining < 0) {
+          // START!
+          context.game.atStart = false;
+          context.game.endGameTime = Rune.gameTime() + (60 * 1000 * 3);
+        } else {
+          const secondsLeft = Math.floor(remaining / 1000) + 1;
+          context.game.statusMessage = "Get Ready!";
+          context.game.countDown = secondsLeft;
+        }
+      }
+    }
+    for (let i = 0; i < 4; i++) {
+      for (const entity of context.game.entities) {
+        updateEntity(Rune.gameTime(), context.game, entity, 0.25);
         const room = findRoomAt(context.game, entity.x, entity.y);
         if (room) {
           room.discovered = true;
           if (room.item) {
             if (closeToCenter(room, entity.x, entity.y)) {
               // intersect with the item in the room
-              if (room.item === "bronze") {
+              if (room.item === "bronze" && !entity.bronzeKey) {
                 entity.bronzeKey = true;
+                context.game.scores[entity.id] += 1;
               }
-              if (room.item === "silver") {
+              if (room.item === "silver" && !entity.silverKey) {
                 entity.silverKey = true;
+                context.game.scores[entity.id] += 1;
               }
-              if (room.item === "gold") {
+              if (room.item === "gold" && !entity.goldKey) {
                 entity.goldKey = true;
+                context.game.scores[entity.id] += 1;
+              }
+              if (room.item === "health") {
+                if (!entity.item) {
+                  entity.item = "health";
+                  room.item = undefined;
+                }
+              }
+              if (room.item === "speed") {
+                if (!entity.item) {
+                  entity.item = "speed";
+                  room.item = undefined;
+                }
+              }
+              if (room.item === "treasure") {
+                context.game.scores[entity.id] += 2;
+                room.item = undefined;
+              }
+
+              if (room.item === "egg" && !context.game.winner) {
+                context.game.winner = entity.id;
               }
             }
           }

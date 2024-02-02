@@ -2,7 +2,9 @@ import { GameState } from "./logic";
 import { blockedLocationInRoom, findRoomAt } from "./room";
 
 export enum EntityType {
-    ELF = 151,
+    MONSTER = 119,
+    FEMALE_ELF = 135,
+    MALE_ELF = 151,
     KNIGHT = 183,
 }
 
@@ -26,6 +28,7 @@ export interface Entity {
     x: number;
     y: number;
     speed: number;
+    speedTimeout: number;
     type: EntityType;
     faceLeft: boolean;
     anim: Animation;
@@ -41,6 +44,7 @@ export function createEntity(id: string, x: number, y: number, type: EntityType)
     return {
         id, x, y, type, faceLeft: false, anim: IDLE,
         speed: 10,
+        speedTimeout: 0,
         controls: {
             left: false,
             right: false,
@@ -54,7 +58,11 @@ export function createEntity(id: string, x: number, y: number, type: EntityType)
     }
 }
 
-export function updateEntity(state: GameState, entity: Entity, step: number): void {
+export function updateEntity(time: number, state: GameState, entity: Entity, step: number): void {
+    if (time > entity.speedTimeout) {
+        entity.speed = 10;
+    }
+
     // diagonal movement is slower
     const controlsDown = Object.values(entity.controls).filter(m => m === true).length;
     if (controlsDown > 0) {
@@ -69,7 +77,7 @@ export function updateEntity(state: GameState, entity: Entity, step: number): vo
             entity.x += speed;
         }
         let room = findRoomAt(state, entity.x, entity.y);
-        if (!room || blockedLocationInRoom(room, entity.x, entity.y, entity.goldKey && entity.silverKey && entity.bronzeKey)) {
+        if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, entity.goldKey && entity.silverKey && entity.bronzeKey)) {
             entity.x = oldX;
         }
 
@@ -80,7 +88,7 @@ export function updateEntity(state: GameState, entity: Entity, step: number): vo
             entity.y += speed;
         }
         room = findRoomAt(state, entity.x, entity.y);
-        if (!room || blockedLocationInRoom(room, entity.x, entity.y, entity.goldKey && entity.silverKey && entity.bronzeKey)) {
+        if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, entity.goldKey && entity.silverKey && entity.bronzeKey)) {
             entity.y = oldY;
         }
     }
