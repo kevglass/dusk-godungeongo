@@ -5,10 +5,17 @@ import gfxTiles2xUrl from "./assets/tileset2x.png";
 import gfxDpad from "./assets/dpad.png";
 import gfxButton from "./assets/button.png";
 import gfxLogo from "./assets/logo.png";
+import sfxCountdown from "./assets/countdown.mp3";
+import sfxCollect from "./assets/collect.mp3";
+import sfxKey from "./assets/key.mp3";
+import sfxWin from "./assets/win.mp3";
+import sfxFail from "./assets/fail.mp3";
+
 import { Entity, EntityType, RUN } from "./entity";
 import { intersects } from "./renderer/util";
 import { Direction, Room, findAllRoomsAt, findRoomAt, inRoomSpace } from "./room";
 import { InterpolatorLatency, Players } from "rune-games-sdk";
+import { Sound, loadSound, playSound } from "./renderer/sound";
 
 const PUFF_TIME = 250;
 const PUFF_COLORS = [
@@ -132,13 +139,24 @@ export class GoDungeonGo implements InputEventListener {
     frame: number = 0;
     effects: CollectEffect[] = [];
 
+    sfxKey: Sound;
+    sfxCollect: Sound;
+    sfxCountdown: Sound;
+    sfxWin: Sound;
+    sfxFail: Sound;
+
     constructor() {
         this.tiles = loadTileSet(gfxTilesUrl, 32, 32);
         this.tiles2x = loadTileSet(gfxTiles2xUrl, 64, 64);
         this.dpad = loadTileSet(gfxDpad, 80, 80);
         this.button = loadTileSet(gfxButton, 80, 80);
         this.logo = loadImage(gfxLogo);
-
+        this.sfxKey = loadSound(sfxKey);
+        this.sfxCollect = loadSound(sfxCollect);
+        this.sfxCountdown = loadSound(sfxCountdown);
+        this.sfxWin = loadSound(sfxWin);
+        this.sfxFail = loadSound(sfxFail);
+        
         this.selectedType = this.typeOptions[Math.floor(Math.random() * this.typeOptions.length)];
     }
 
@@ -163,34 +181,63 @@ export class GoDungeonGo implements InputEventListener {
                 this.localRooms = {};
                 this.effects = [];
             }
+            if (event.type === GameEventType.WIN) {
+                playSound(this.sfxWin);
+            }
+            if (event.type === GameEventType.TIME_OUT) {
+                playSound(this.sfxFail);
+            }
+            if (event.type === GameEventType.START_COUNTDOWN) {
+                setTimeout(() => {
+                    playSound(this.sfxCountdown);
+                }, 1000);
+            }
             if (event.type === GameEventType.GOT_HEALTH) {
                 if (event.x && event.y) {
                     this.effects.push({ x: event.x * 32, y: event.y * 32, life: 30, tile: 27 })
+                }
+                if (event.who === this.playerId) {
+                    playSound(this.sfxCollect);
                 }
             }
             if (event.type === GameEventType.GOT_SPEED) {
                 if (event.x && event.y) {
                     this.effects.push({ x: event.x * 32, y: event.y * 32, life: 30, tile: 28 })
                 }
+                if (event.who === this.playerId) {
+                    playSound(this.sfxCollect);
+                }
             }
             if (event.type === GameEventType.GOT_TREASURE) {
                 if (event.x && event.y) {
                     this.effects.push({ x: event.x * 32, y: event.y * 32, life: 30, tile: 6 })
+                }
+                if (event.who === this.playerId) {
+                    playSound(this.sfxCollect);
                 }
             }
             if (event.type === GameEventType.GOT_BRONZE) {
                 if (event.x && event.y) {
                     this.effects.push({ x: event.x * 32, y: event.y * 32, life: 30, tile: 11 })
                 }
+                if (event.who === this.playerId) {
+                    playSound(this.sfxKey);
+                }
             }
             if (event.type === GameEventType.GOT_SILVER) {
                 if (event.x && event.y) {
                     this.effects.push({ x: event.x * 32, y: event.y * 32, life: 30, tile: 10 })
                 }
+                if (event.who === this.playerId) {
+                    playSound(this.sfxKey);
+                }
             }
             if (event.type === GameEventType.GOT_GOLD) {
                 if (event.x && event.y) {
                     this.effects.push({ x: event.x * 32, y: event.y * 32, life: 30, tile: 9 })
+                }
+                if (event.who === this.playerId) {
+                    playSound(this.sfxKey);
                 }
             }
         }
@@ -627,7 +674,10 @@ export class GoDungeonGo implements InputEventListener {
                         setAlpha(1);
                     }
                 }
-                for (const entity of this.game.entities) {
+                const ysort = [...this.game.entities];
+                ysort.sort((a, b) => a.y - b.y);
+
+                for (const entity of ysort) {
                     const room = findRoomAt(this.game, entity.x, entity.y);
                     if (room) {
                         const localRoom = this.localRooms[room.id];
@@ -718,7 +768,7 @@ export class GoDungeonGo implements InputEventListener {
                             }
                         }
 
-                        for (const entity of this.game.entities) {
+                        for (const entity of this.game.entities.filter(e => e.type !== EntityType.MONSTER)) {
                             const room = findRoomAt(this.game, entity.x, entity.y);
                             if (room && room.discovered) {
                                 const localRoom = this.localRooms[room.id];

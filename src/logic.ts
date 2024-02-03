@@ -39,6 +39,9 @@ export enum GameEventType {
   GOT_GOLD = 5,
   GOT_SPEED = 6,
   GOT_HEALTH = 7,
+  START_COUNTDOWN = 8,
+  WIN = 9,
+  TIME_OUT = 10,
 }
 
 export interface GameEvent {
@@ -169,6 +172,12 @@ Rune.initLogic({
   events: {
     playerJoined(playerId, context) {
       // we don't need to do anything until they select a character type
+    },
+    playerLeft(playerId, context) {
+      const toRemove = context.game.entities.find(e => e.id === playerId);
+      if (toRemove) {
+        context.game.entities.splice(context.game.entities.indexOf(toRemove), 1);
+      }
     }
   },
   update: (context) => {
@@ -184,16 +193,25 @@ Rune.initLogic({
       context.game.winner = undefined;
       context.game.gameOver = true;
       context.game.gameOverTime = Rune.gameTime();
+      context.game.events.push({ type: GameEventType.TIME_OUT });
       return;
     }
     if (context.game.gameOver) {
       return;
     }
 
-    if (context.game.atStart && getPlayerCount(context.game) > 1) {
+    let minPlayers = 2;
+    // if theres only one player in the room, then we can start with just
+    // one in solo mode
+    if (context.allPlayerIds.length === 1) {
+      minPlayers = 1;
+    }
+
+    if (context.game.atStart && getPlayerCount(context.game) >= minPlayers) {
       // start the kick off timer
       if (context.game.startRace === 0) {
         context.game.startRace = Rune.gameTime() + 5000;
+        context.game.events.push({ type: GameEventType.START_COUNTDOWN });
       } else {
         const remaining = context.game.startRace - Rune.gameTime();
         if (remaining < 0) {
@@ -257,6 +275,7 @@ Rune.initLogic({
                 context.game.winner = entity.id;
                 context.game.gameOver = true;
                 context.game.gameOverTime = Rune.gameTime();
+                context.game.events.push({ type: GameEventType.WIN });
               }
             }
           }

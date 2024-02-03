@@ -1,3 +1,4 @@
+import { EntityType, createEntity } from "./entity";
 import { GameState } from "./logic";
 
 export enum Direction {
@@ -5,6 +6,11 @@ export enum Direction {
     SOUTH = 2,
     EAST = 3,
     WEST = 4
+}
+
+export interface SpikeLocation {
+    x: number;
+    y: number;
 }
 
 export interface Room {
@@ -17,6 +23,8 @@ export interface Room {
     doors: Record<number, boolean>;
     depth: number;
     discovered: boolean;
+    spikes: boolean;
+    spikeLocations: SpikeLocation[];
     item?: "silver" | "bronze" | "gold" | "egg" | "treasure" | "speed" | "health";
 }
 
@@ -34,7 +42,7 @@ function reverseDirection(dir: Direction): Direction {
 }
 
 export function generateDungeon(state: GameState): void {
-    const startRoom: Room = { id: 1, x: 0, y: 0, width: 10, height: 10, connections: {}, doors: {}, depth: 0, discovered: false };
+    const startRoom: Room = { id: 1, x: 0, y: 0, width: 10, height: 10, connections: {}, doors: {}, depth: 0, discovered: false, spikes: false, spikeLocations: []};
     state.rooms.push(startRoom);
 
     const targetCount = 50;
@@ -67,7 +75,7 @@ export function generateDungeon(state: GameState): void {
         const direction = possibleDirections[Math.floor(Math.random() * possibleDirections.length)];
         const newRoom: Room = {
             id: nextId++, x: 0, y: 0, width: 6 + (Math.floor(Math.random() * 3) * 2), height: 6 + (Math.floor(Math.random() * 3) * 2),
-            connections: {}, doors: {}, depth: fromRoom.depth + 1, discovered: false
+            connections: {}, doors: {}, depth: fromRoom.depth + 1, discovered: false, spikes: false, spikeLocations: []
         };
         if (direction === Direction.NORTH) {
             newRoom.y = fromRoom.y - 2 - newRoom.height;
@@ -160,6 +168,25 @@ export function generateDungeon(state: GameState): void {
         const target = possible[Math.floor(Math.random() * possible.length)];
         target.item = "speed";
     }
+
+    // place spike rooms
+    for (let i = 0; i < 5; i++) {
+        const possible = state.rooms.filter(r => r !== deepestRoom && !r.item && !r.spikes);
+        const target = possible[Math.floor(Math.random() * possible.length)];
+        target.spikes = true;
+        for (let n=0;n<5;n++) {
+            target.spikeLocations.push({ x: 1 + Math.floor(Math.random() * target.width - 2), y: 1 + Math.floor(Math.random() * target.width - 2) });
+        }
+    }
+    // place monster room
+    for (let i = 0; i < 5; i++) {
+        const possible = state.rooms.filter(r => r !== deepestRoom && !r.item && !r.spikes);
+        const target = possible[Math.floor(Math.random() * possible.length)];
+        const monster = createEntity("monster" + i, Math.floor(target.x + (target.width / 2)) * 32, Math.floor(target.y + (target.height / 2)) * 32, EntityType.MONSTER);
+        monster.speed /= 2;
+        state.entities.push(monster);
+    }
+
 
     state.startRoom = deepestRoom.id;
     console.log(state.rooms.length + " rooms generated");
