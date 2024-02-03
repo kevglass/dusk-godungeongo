@@ -26,6 +26,26 @@ export interface GameState {
   statusMessage: string;
   countDown: number;
   endGameTime: number;
+  gameOver: boolean;
+  gameOverTime: number;
+  events: GameEvent[];
+}
+
+export enum GameEventType {
+  RESTART = 1,
+  GOT_TREASURE = 2,
+  GOT_BRONZE = 3,
+  GOT_SILVER = 4,
+  GOT_GOLD = 5,
+  GOT_SPEED = 6,
+  GOT_HEALTH = 7,
+}
+
+export interface GameEvent {
+  type: GameEventType;
+  who?: string;
+  x?: number;
+  y?: number;
 }
 
 type GameActions = {
@@ -68,6 +88,8 @@ function startGame(state: GameState) {
   state.startRace = 0;
   state.countDown = -1;
   state.endGameTime = 0;
+  state.gameOver = false;
+  state.gameOverTime = 0;
 
   generateDungeon(state);
 
@@ -76,6 +98,7 @@ function startGame(state: GameState) {
   }
 
   state.statusMessage = "Waiting for Players!";
+  state.events.push({ type: GameEventType.RESTART });
 }
 
 Rune.initLogic({
@@ -92,6 +115,9 @@ Rune.initLogic({
       statusMessage: "",
       countDown: -1,
       endGameTime: 0,
+      gameOver: false,
+      gameOverTime: 0,
+      events: []
     }
 
     startGame(initialState);
@@ -146,7 +172,25 @@ Rune.initLogic({
     }
   },
   update: (context) => {
-    if (context.game.atStart && getPlayerCount(context.game) > 0) {
+    context.game.events = [];
+
+    // if we've shown the game over message for long enough then reset the game
+    if (context.game.gameOver && Rune.gameTime() - context.game.gameOverTime > 5000) {
+      startGame(context.game);
+      return;
+    }
+    // time ran out, nobody wins
+    if (!context.game.atStart && !context.game.gameOver && context.game.endGameTime < Rune.gameTime()) {
+      context.game.winner = undefined;
+      context.game.gameOver = true;
+      context.game.gameOverTime = Rune.gameTime();
+      return;
+    }
+    if (context.game.gameOver) {
+      return;
+    }
+
+    if (context.game.atStart && getPlayerCount(context.game) > 1) {
       // start the kick off timer
       if (context.game.startRace === 0) {
         context.game.startRace = Rune.gameTime() + 5000;
@@ -163,11 +207,12 @@ Rune.initLogic({
         }
       }
     }
+
     for (let i = 0; i < 4; i++) {
       for (const entity of context.game.entities) {
         updateEntity(Rune.gameTime(), context.game, entity, 0.25);
         const room = findRoomAt(context.game, entity.x, entity.y);
-        if (room) {
+        if (room && entity.type !== EntityType.MONSTER) {
           room.discovered = true;
           if (room.item) {
             if (closeToCenter(room, entity.x, entity.y)) {
@@ -175,34 +220,43 @@ Rune.initLogic({
               if (room.item === "bronze" && !entity.bronzeKey) {
                 entity.bronzeKey = true;
                 context.game.scores[entity.id] += 1;
+                context.game.events.push({ type: GameEventType.GOT_BRONZE, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2});
               }
               if (room.item === "silver" && !entity.silverKey) {
                 entity.silverKey = true;
                 context.game.scores[entity.id] += 1;
+                context.game.events.push({ type: GameEventType.GOT_SILVER, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2});
               }
               if (room.item === "gold" && !entity.goldKey) {
                 entity.goldKey = true;
                 context.game.scores[entity.id] += 1;
+                context.game.events.push({ type: GameEventType.GOT_GOLD, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2});
               }
               if (room.item === "health") {
                 if (!entity.item) {
                   entity.item = "health";
                   room.item = undefined;
+                  context.game.events.push({ type: GameEventType.GOT_HEALTH, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2});
                 }
               }
               if (room.item === "speed") {
                 if (!entity.item) {
                   entity.item = "speed";
                   room.item = undefined;
+                  context.game.events.push({ type: GameEventType.GOT_SPEED, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2});
                 }
               }
               if (room.item === "treasure") {
                 context.game.scores[entity.id] += 2;
                 room.item = undefined;
+                context.game.events.push({ type: GameEventType.GOT_TREASURE, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2});
               }
 
               if (room.item === "egg" && !context.game.winner) {
+                context.game.scores[entity.id] += 7;
                 context.game.winner = entity.id;
+                context.game.gameOver = true;
+                context.game.gameOverTime = Rune.gameTime();
               }
             }
           }

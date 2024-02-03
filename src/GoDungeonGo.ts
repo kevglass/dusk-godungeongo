@@ -1,9 +1,11 @@
-import { GameState, GameUpdate } from "./logic";
+import { GameEventType, GameState, GameUpdate } from "./logic";
 import { InputEventListener, TileSet, drawImage, drawRect, drawText, drawTile, fillCircle, fillRect, halfCircle, loadImage, loadTileSet, popState, pushState, registerInputEventListener, scale, screenHeight, screenWidth, setAlpha, stringWidth, translate, updateGraphics } from "./renderer/graphics";
 import gfxTilesUrl from "./assets/tileset.png";
+import gfxTiles2xUrl from "./assets/tileset2x.png";
 import gfxDpad from "./assets/dpad.png";
 import gfxButton from "./assets/button.png";
-import { Entity, EntityType } from "./entity";
+import gfxLogo from "./assets/logo.png";
+import { Entity, EntityType, RUN } from "./entity";
 import { intersects } from "./renderer/util";
 import { Direction, Room, findAllRoomsAt, findRoomAt, inRoomSpace } from "./room";
 import { InterpolatorLatency, Players } from "rune-games-sdk";
@@ -21,6 +23,22 @@ const SPEED_PUFF_COLORS = [
     "rgba(100,100,200,0.7)",
     "rgba(100,100,180,0.7)"
 ];
+
+const CHAR_NAMES: Record<EntityType, string> = {
+    [EntityType.MONSTER]: "",
+    [EntityType.FEMALE_ELF]: "Awen",
+    [EntityType.PINK_KNIGHT]: "Sir Gadabout",
+    [EntityType.MALE_ELF]: "Legolas",
+    [EntityType.ORANGE_KNIGHT]: "Sir Howey",
+    [EntityType.FEMALE_MAGE]: "Morgana",
+    [EntityType.MALE_MAGE]: "Merlin",
+    [EntityType.DINO1]: "Dino",
+    [EntityType.DINO2]: "Little Foot",
+    [EntityType.FACE_GUY]: "Face Guy",
+    [EntityType.ORC]: "Urgg",
+    [EntityType.ORC_CHIEF]: "Graar",
+    [EntityType.SKELLY]: "Boney",
+}
 
 interface Puff {
     x: number;
@@ -69,7 +87,15 @@ export class LocalRoom {
     fade = 0;
 }
 
+interface CollectEffect {
+    x: number;
+    y: number;
+    tile: number;
+    life: number;
+}
+
 export class GoDungeonGo implements InputEventListener {
+    tiles2x: TileSet;
     tiles: TileSet;
     dpad: TileSet;
     button: TileSet;
@@ -96,11 +122,24 @@ export class GoDungeonGo implements InputEventListener {
 
     players?: Players;
     avatarImages: Record<string, HTMLImageElement> = {}
-    
+    logo: HTMLImageElement;
+
+    dpadCenterY: number = -1;
+    dpadCenterX: number = -1;
+    selectedType: EntityType = EntityType.PINK_KNIGHT;
+    typeOptions: EntityType[] = [EntityType.FEMALE_ELF, EntityType.PINK_KNIGHT, EntityType.MALE_ELF, EntityType.FEMALE_MAGE, EntityType.MALE_MAGE, EntityType.DINO1, EntityType.ORANGE_KNIGHT, EntityType.DINO2, EntityType.FACE_GUY, EntityType.ORC, EntityType.ORC_CHIEF, EntityType.SKELLY];
+
+    frame: number = 0;
+    effects: CollectEffect[] = [];
+
     constructor() {
         this.tiles = loadTileSet(gfxTilesUrl, 32, 32);
+        this.tiles2x = loadTileSet(gfxTiles2xUrl, 64, 64);
         this.dpad = loadTileSet(gfxDpad, 80, 80);
         this.button = loadTileSet(gfxButton, 80, 80);
+        this.logo = loadImage(gfxLogo);
+
+        this.selectedType = this.typeOptions[Math.floor(Math.random() * this.typeOptions.length)];
     }
 
     start(): void {
@@ -118,6 +157,52 @@ export class GoDungeonGo implements InputEventListener {
     }
 
     gameUpdate(update: GameUpdate) {
+        for (const event of update.game.events) {
+            if (event.type === GameEventType.RESTART) {
+                this.entitySprites = {};
+                this.localRooms = {};
+                this.effects = [];
+            }
+            if (event.type === GameEventType.GOT_HEALTH) {
+                if (event.x && event.y) {
+                    this.effects.push({ x: event.x * 32, y: event.y * 32, life: 30, tile: 27 })
+                }
+            }
+            if (event.type === GameEventType.GOT_SPEED) {
+                if (event.x && event.y) {
+                    this.effects.push({ x: event.x * 32, y: event.y * 32, life: 30, tile: 28 })
+                }
+            }
+            if (event.type === GameEventType.GOT_TREASURE) {
+                if (event.x && event.y) {
+                    this.effects.push({ x: event.x * 32, y: event.y * 32, life: 30, tile: 6 })
+                }
+            }
+            if (event.type === GameEventType.GOT_BRONZE) {
+                if (event.x && event.y) {
+                    this.effects.push({ x: event.x * 32, y: event.y * 32, life: 30, tile: 11 })
+                }
+            }
+            if (event.type === GameEventType.GOT_SILVER) {
+                if (event.x && event.y) {
+                    this.effects.push({ x: event.x * 32, y: event.y * 32, life: 30, tile: 10 })
+                }
+            }
+            if (event.type === GameEventType.GOT_GOLD) {
+                if (event.x && event.y) {
+                    this.effects.push({ x: event.x * 32, y: event.y * 32, life: 30, tile: 9 })
+                }
+            }
+        }
+
+        // update any particle effects
+        for (const p of [...this.effects]) {
+            p.life -= 1;
+            if (p.life < 0) {
+                this.effects.splice(this.effects.indexOf(p), 1);
+            }
+        }
+
         // do nothing
         this.game = update.game;
         this.playerId = update.yourPlayerId;
@@ -162,17 +247,15 @@ export class GoDungeonGo implements InputEventListener {
 
     processDPad(x: number, y: number) {
         if (this.game) {
-            const dpadCenterY = screenHeight() - (this.controlSize / 2) - this.controlVerticalPadding;
-            const dpadCenterX = this.controlHorizontalPadding + (this.controlSize / 2);
-            const dx = x - dpadCenterX;
-            const dy = y - dpadCenterY;
+            const dx = x - this.dpadCenterX;
+            const dy = y - this.dpadCenterY;
 
             let left = false;
             let right = false;
             let down = false;
             let up = false;
 
-            if (Math.abs(dx) > this.controlSize / 4) {
+            if (Math.abs(dx) > this.controlSize / 6) {
                 // dx is big enough to be relevant
                 left = dx < 0;
                 right = dx > 0;
@@ -181,7 +264,7 @@ export class GoDungeonGo implements InputEventListener {
                 right = false;
             }
 
-            if (Math.abs(dy) > this.controlSize / 4) {
+            if (Math.abs(dy) > this.controlSize / 6) {
                 // dx is big enough to be relevant
                 up = dy < 0;
                 down = dy > 0;
@@ -203,10 +286,12 @@ export class GoDungeonGo implements InputEventListener {
         if (this.joined) {
             const controlsY = screenHeight() - this.controlSize - this.controlVerticalPadding;
 
-            if (intersects(x, y, this.controlHorizontalPadding, controlsY, this.controlSize, this.controlSize)) {
+            if (x < screenWidth() / 2 && y > screenHeight() / 2) {
                 // pressed in the DPAD, if we don't already have a finger down there
                 // then we do now
                 this.touchInDpad = index;
+                this.dpadCenterX = x;
+                this.dpadCenterY = y;
                 this.processDPad(x, y);
             }
 
@@ -227,8 +312,26 @@ export class GoDungeonGo implements InputEventListener {
     mouseUp(x: number, y: number, index: number): void {
         // do nothing
         if (!this.joined) {
-            Rune.actions.join({ type: EntityType.KNIGHT });
-            this.joined = true;
+            if (x < 84) {
+                // left press
+                let index = this.typeOptions.indexOf(this.selectedType);
+                if (index > 0) {
+                    index--;
+                }
+
+                this.selectedType = this.typeOptions[index];
+            } else if (x > screenWidth() - 84) {
+                // right press
+                let index = this.typeOptions.indexOf(this.selectedType);
+                if (index < this.typeOptions.length - 1) {
+                    index++;
+                }
+
+                this.selectedType = this.typeOptions[index];
+            } else if (y > 350) {
+                Rune.actions.join({ type: this.selectedType });
+                this.joined = true;
+            }
         } else {
             if (index === this.touchInDpad) {
                 this.touchInDpad = -1;
@@ -480,6 +583,11 @@ export class GoDungeonGo implements InputEventListener {
         // let the graphics do whatever it wants to do
         updateGraphics();
 
+        if (this.dpadCenterX == -1) {
+            this.dpadCenterX = this.controlHorizontalPadding + (this.controlSize / 2);
+            this.dpadCenterY = screenHeight() - (this.controlSize / 2) - this.controlVerticalPadding;
+        }
+
         if (this.game) {
             if (this.joined) {
                 // simple player camera tracking
@@ -544,6 +652,11 @@ export class GoDungeonGo implements InputEventListener {
                                 setAlpha(1);
                             }
                             translate(sprite.interpolator.getPosition()[0] - 16, sprite.interpolator.getPosition()[1] - 32);
+                            if (this.players && this.players[entity.id]) {
+                                const name = this.players[entity.id].displayName;
+                                drawText(16 - Math.floor(stringWidth(name, 10) / 2), - 15, name, 10, "black");
+                                drawText(16 - Math.floor(stringWidth(name, 10) / 2), - 16, name, 10, "white");
+                            }
                             if (entity.faceLeft) {
                                 scale(-1, 1);
                                 translate(-32, 0);
@@ -557,10 +670,19 @@ export class GoDungeonGo implements InputEventListener {
                     }
                 }
 
+                for (const p of this.effects) {
+                    pushState();
+                    setAlpha(Math.min(1, p.life / 30));
+                    translate(p.x, p.y);
+                    scale(1 + (5 * (1 - Math.min(1, p.life / 30))), 1 + (5 * (1 - Math.min(1, p.life / 30))));
+                    drawTile(this.tiles, -16, -16, p.tile);
+                    popState();
+                }
+
                 popState();
 
                 // render mini map
-                if (this.game && !this.game.atStart) {
+                if (this.game && !this.game.atStart && !this.game.gameOver) {
                     pushState();
 
                     const myEntity = this.game.entities.find(e => e.id === this.playerId)
@@ -611,8 +733,9 @@ export class GoDungeonGo implements InputEventListener {
 
                 // render game controls
                 pushState();
+                setAlpha(0.8);
+                drawTile(this.dpad, this.dpadCenterX - (this.controlSize / 2), this.dpadCenterY - (this.controlSize / 2), 0, this.controlSize, this.controlSize);
                 translate(0, screenHeight() - this.controlSize - this.controlVerticalPadding);
-                drawTile(this.dpad, this.controlHorizontalPadding, 0, 0, this.controlSize, this.controlSize);
 
                 drawTile(this.button, screenWidth() - this.controlSize - this.controlHorizontalPadding, 0, 0, this.controlSize, this.controlSize);
                 if (this.game) {
@@ -630,7 +753,7 @@ export class GoDungeonGo implements InputEventListener {
                 popState();
 
                 // render score board when at start
-                if (this.game && this.players && this.game.atStart) {
+                if (this.game && this.players && (this.game.atStart || this.game.gameOver)) {
                     let item = 0;
                     const scores = [];
 
@@ -641,10 +764,10 @@ export class GoDungeonGo implements InputEventListener {
                     scores.sort((a, b) => b.score - a.score);
 
                     for (const score of scores) {
-                        fillRect(0, 1+(item *34), screenWidth(), 32, item % 2 === 0 ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.1)");
-                        drawImage(this.avatarImages[score.playerId], 0, (item*34)+1, 32, 32);
+                        fillRect(0, 1 + (item * 34), screenWidth(), 32, item % 2 === 0 ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.3)");
+                        drawImage(this.avatarImages[score.playerId], 1, (item * 34) + 2, 30, 30);
                         drawText(40, 25 + (item * 34), score.displayName, 20, "white");
-                        drawText(screenWidth() - stringWidth(""+score.score, 20) - 20, 25 + (item * 34), ""+score.score, 20, "white");
+                        drawText(screenWidth() - stringWidth("" + score.score, 20) - 20, 25 + (item * 34), "" + score.score, 20, "white");
                         item++;
                     }
                 }
@@ -654,19 +777,29 @@ export class GoDungeonGo implements InputEventListener {
                     fillRect(0, 130, screenWidth(), 100, "rgba(0,0,0,0.5)");
                     drawText(Math.floor(screenWidth() - stringWidth(this.game.statusMessage, 20)) / 2, 160, this.game.statusMessage, 20, "white");
                     if (this.game.countDown > 0) {
-                        drawText(Math.floor(screenWidth() - stringWidth(this.game.countDown+"", 50)) / 2, 220, this.game.countDown+"", 50, "white");
+                        drawText(Math.floor(screenWidth() - stringWidth(this.game.countDown + "", 50)) / 2, 220, this.game.countDown + "", 50, "white");
                     }
                 } else if (Rune.gameTime() - this.game.startRace < 1000 && Rune.gameTime() - this.game.startRace > 0) {
                     fillRect(0, 130, screenWidth(), 100, "rgba(0,0,0,0.5)");
-                    drawText(Math.floor(screenWidth() - stringWidth("First to the Egg!", 20)) / 2, 160, "First to the Egg!", 20, "#ee8e2e");
+                    drawText(Math.floor(screenWidth() - stringWidth("Find the Keys! First to the Egg!", 20)) / 2, 160, "Find the Keys! First to the Egg!", 20, "#ee8e2e");
                     drawText(Math.floor(screenWidth() - stringWidth("GO!", 50)) / 2, 220, "GO!", 50, "#4ba747");
+                } else if (this.game.gameOver) {
+                    fillRect(0, 130, screenWidth(), 100, "rgba(0,0,0,0.5)");
+                    if (this.game.winner && this.players) {
+                        const winnerName = this.players[this.game.winner].displayName ?? "";
+                        drawText(Math.floor(screenWidth() - stringWidth(winnerName, 20)) / 2, 160, winnerName, 20, "white");
+                        drawText(Math.floor(screenWidth() - stringWidth("Found the Egg!", 20)) / 2, 200, "Found the Egg!", 20, "white");
+                    } else {
+                        drawText(Math.floor(screenWidth() - stringWidth("TIME OUT!", 50)) / 2, 200, "TIME OUT!", 50, "#da4e38");
+                    }
                 }
+
                 // draw the HUD for keys and health
-                if (this.game && !this.game.atStart) {
+                if (this.game && !this.game.atStart && !this.game.gameOver) {
                     const remaining = Math.max(0, this.game.endGameTime - Rune.gameTime());
                     const seconds = Math.floor(remaining / 1000) % 60;
                     const minutes = Math.floor(Math.floor(remaining / 1000) / 60);
-                    let timeStr = minutes+":";
+                    let timeStr = minutes + ":";
                     if (seconds < 10) {
                         timeStr += "0";
                     }
@@ -696,6 +829,47 @@ export class GoDungeonGo implements InputEventListener {
                         }
                     }
                 }
+            } else {
+                // render main menu 
+                this.frame += 0.1;
+                const frameIndex = Math.floor(this.frame) % RUN.count;
+
+                let width = this.logo.width;
+                let height = this.logo.height;
+
+                if (width > screenWidth()) {
+                    width = this.logo.width / 2;
+                    height = this.logo.height / 2;
+                }
+                drawImage(this.logo, Math.floor((screenWidth() - width) / 2), 10, width, height);
+
+                const selectedIndex = this.typeOptions.indexOf(this.selectedType);
+                for (const type of this.typeOptions) {
+                    const x = ((screenWidth() / 2) - 32) - (selectedIndex * 70) + (this.typeOptions.indexOf(type) * 70);
+                    const y = 200;
+                    let frameOffset = 0;
+
+                    if (type !== this.selectedType) {
+                        setAlpha(0.25);
+                    } else {
+                        frameOffset = frameIndex;
+                    }
+                    drawTile(this.tiles2x, x, y, type + frameOffset);
+                    drawTile(this.tiles2x, x, y + 64, type + 16 + frameOffset);
+                    setAlpha(1);
+                }
+
+                drawTile(this.tiles2x, 20, 250, 54);
+                drawTile(this.tiles2x, screenWidth() - 64 - 20, 250, 70);
+
+
+                drawTile(this.tiles2x, Math.floor(screenWidth() / 2) - 64 - 32, 350, 55);
+                drawTile(this.tiles2x, Math.floor(screenWidth() / 2) - 32, 350, 56);
+                drawTile(this.tiles2x, Math.floor(screenWidth() / 2) + 64 - 32, 350, 57);
+                drawText(Math.floor((screenWidth() - stringWidth("Play!", 20)) / 2), 388, "Play!", 20, "white");
+
+                const name = CHAR_NAMES[this.selectedType];
+                drawText(Math.floor((screenWidth() - stringWidth(name, 20)) / 2), 230, name, 20, "white");
             }
         }
 

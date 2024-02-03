@@ -2,10 +2,19 @@ import { GameState } from "./logic";
 import { blockedLocationInRoom, findRoomAt } from "./room";
 
 export enum EntityType {
-    MONSTER = 119,
-    FEMALE_ELF = 135,
-    MALE_ELF = 151,
-    KNIGHT = 183,
+    MONSTER = 87,
+    FEMALE_ELF = 87+(32*1),
+    MALE_ELF = 87+(32*2),
+    PINK_KNIGHT = 87+(32*3),
+    ORANGE_KNIGHT = 87+(32*4),
+    FEMALE_MAGE = 87+(32*5),
+    MALE_MAGE = 87+(32*6),
+    DINO1 = 87+(32*7),
+    DINO2 = 87+(32*8),
+    FACE_GUY = 87+(32*9),
+    ORC = 87+(32*10),
+    ORC_CHIEF = 87+(32*11),
+    SKELLY = 87+(32*12)
 }
 
 export interface Animation {
