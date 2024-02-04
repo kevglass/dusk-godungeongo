@@ -58,6 +58,20 @@ export function playSound(sound: Sound): void {
     })
 }
 
+// Play a given sound, if the sound has yet to be buffered it will
+// be before wee play it
+export function loopSound(sound: Sound): void {
+    tryLoadSound(sound).then(() => {
+        if (sound.buffer) {
+            const source = audioContext.createBufferSource();
+            source.loop = true;
+            source.buffer = sound.buffer;
+            source.connect(audioContext.destination);
+            source.start(0);
+        }
+    })
+}
+
 // Hook to cause the audio context to resume when the user does something. Browsers
 // need audio contexts to be resumed on user input events
 export function resumeAudioOnInput() {

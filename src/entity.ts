@@ -3,18 +3,18 @@ import { blockedLocationInRoom, findRoomAt } from "./room";
 
 export enum EntityType {
     MONSTER = 87,
-    FEMALE_ELF = 87+(32*1),
-    MALE_ELF = 87+(32*2),
-    PINK_KNIGHT = 87+(32*3),
-    ORANGE_KNIGHT = 87+(32*4),
-    FEMALE_MAGE = 87+(32*5),
-    MALE_MAGE = 87+(32*6),
-    DINO1 = 87+(32*7),
-    DINO2 = 87+(32*8),
-    FACE_GUY = 87+(32*9),
-    ORC = 87+(32*10),
-    ORC_CHIEF = 87+(32*11),
-    SKELLY = 87+(32*12)
+    FEMALE_ELF = 87 + (32 * 1),
+    MALE_ELF = 87 + (32 * 2),
+    PINK_KNIGHT = 87 + (32 * 3),
+    ORANGE_KNIGHT = 87 + (32 * 4),
+    FEMALE_MAGE = 87 + (32 * 5),
+    MALE_MAGE = 87 + (32 * 6),
+    DINO1 = 87 + (32 * 7),
+    DINO2 = 87 + (32 * 8),
+    FACE_GUY = 87 + (32 * 9),
+    ORC = 87 + (32 * 10),
+    ORC_CHIEF = 87 + (32 * 11),
+    SKELLY = 87 + (32 * 12)
 }
 
 export interface Animation {
@@ -47,6 +47,7 @@ export interface Entity {
     bronzeKey: boolean;
     health: number;
     item?: "health" | "speed";
+    hurtAt: number;
 }
 
 export function createEntity(id: string, x: number, y: number, type: EntityType): Entity {
@@ -64,6 +65,7 @@ export function createEntity(id: string, x: number, y: number, type: EntityType)
         silverKey: false,
         bronzeKey: false,
         health: 3,
+        hurtAt: -10000
     }
 }
 
@@ -72,33 +74,70 @@ export function updateEntity(time: number, state: GameState, entity: Entity, ste
         entity.speed = 10;
     }
 
-    // diagonal movement is slower
-    const controlsDown = Object.values(entity.controls).filter(m => m === true).length;
-    if (controlsDown > 0) {
-        const speed = (controlsDown > 1 ? entity.speed * 0.8 : entity.speed) * step;
-
+    if (entity.type === EntityType.MONSTER) {
+        const monsterSpeed = 1;
         const oldX = entity.x;
         const oldY = entity.y;
-        if (entity.controls.left) {
-            entity.x -= speed;
-        }
-        if (entity.controls.right) {
-            entity.x += speed;
-        }
         let room = findRoomAt(state, entity.x, entity.y);
-        if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, entity.goldKey && entity.silverKey && entity.bronzeKey)) {
-            entity.x = oldX;
+        const opponent = state.entities.find(e => e.type !== EntityType.MONSTER && findRoomAt(state, e.x, e.y) === room);
+        if (opponent) {
+            const dx = opponent.x - entity.x;
+            const dy = opponent.y - entity.y;
+            const len = Math.sqrt((dx*dx)+(dy*dy));
+            entity.x += (dx / len) * monsterSpeed;
+            if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, false)) {
+                entity.x = oldX;
+            }
+            entity.y += (dy / len) * monsterSpeed;
+            room = findRoomAt(state, entity.x, entity.y);
+            if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, false)) {
+                entity.y = oldY;
+            }
+        } else {
+            if (room) {
+                const dx = ((room.x + (room.width/2)) * 32) - entity.x;
+                const dy = ((room.y + (room.height/2)) * 32) - entity.y;
+                const len = Math.sqrt((dx*dx)+(dy*dy));
+                entity.x += (dx / len) * monsterSpeed;
+                if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, false)) {
+                    entity.x = oldX;
+                }
+                entity.y += (dy / len) * monsterSpeed;
+                room = findRoomAt(state, entity.x, entity.y);
+                if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, false)) {
+                    entity.y = oldY;
+                }
+            } 
         }
+    } else {
+        // diagonal movement is slower
+        const controlsDown = Object.values(entity.controls).filter(m => m === true).length;
+        if (controlsDown > 0) {
+            const speed = (controlsDown > 1 ? entity.speed * 0.8 : entity.speed) * step;
 
-        if (entity.controls.up) {
-            entity.y -= speed;
-        }
-        if (entity.controls.down) {
-            entity.y += speed;
-        }
-        room = findRoomAt(state, entity.x, entity.y);
-        if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, entity.goldKey && entity.silverKey && entity.bronzeKey)) {
-            entity.y = oldY;
+            const oldX = entity.x;
+            const oldY = entity.y;
+            if (entity.controls.left) {
+                entity.x -= speed;
+            }
+            if (entity.controls.right) {
+                entity.x += speed;
+            }
+            let room = findRoomAt(state, entity.x, entity.y);
+            if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, entity.goldKey && entity.silverKey && entity.bronzeKey)) {
+                entity.x = oldX;
+            }
+
+            if (entity.controls.up) {
+                entity.y -= speed;
+            }
+            if (entity.controls.down) {
+                entity.y += speed;
+            }
+            room = findRoomAt(state, entity.x, entity.y);
+            if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, entity.goldKey && entity.silverKey && entity.bronzeKey)) {
+                entity.y = oldY;
+            }
         }
     }
 }
