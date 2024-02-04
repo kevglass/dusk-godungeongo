@@ -75,37 +75,25 @@ export function updateEntity(time: number, state: GameState, entity: Entity, ste
     }
 
     if (entity.type === EntityType.MONSTER) {
-        const monsterSpeed = 1;
-        const oldX = entity.x;
-        const oldY = entity.y;
-        let room = findRoomAt(state, entity.x, entity.y);
+        const monsterSpeed = 2;
+        const room = findRoomAt(state, entity.x, entity.y);
         const opponent = state.entities.find(e => e.type !== EntityType.MONSTER && findRoomAt(state, e.x, e.y) === room);
         if (opponent) {
             const dx = opponent.x - entity.x;
             const dy = opponent.y - entity.y;
             const len = Math.sqrt((dx*dx)+(dy*dy));
-            entity.x += (dx / len) * monsterSpeed;
-            if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, false)) {
-                entity.x = oldX;
-            }
-            entity.y += (dy / len) * monsterSpeed;
-            room = findRoomAt(state, entity.x, entity.y);
-            if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, false)) {
-                entity.y = oldY;
+            if (len !== 0) {
+                entity.x += (dx / len) * monsterSpeed;
+                entity.y += (dy / len) * monsterSpeed;
             }
         } else {
             if (room) {
                 const dx = ((room.x + (room.width/2)) * 32) - entity.x;
                 const dy = ((room.y + (room.height/2)) * 32) - entity.y;
                 const len = Math.sqrt((dx*dx)+(dy*dy));
-                entity.x += (dx / len) * monsterSpeed;
-                if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, false)) {
-                    entity.x = oldX;
-                }
-                entity.y += (dy / len) * monsterSpeed;
-                room = findRoomAt(state, entity.x, entity.y);
-                if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, false)) {
-                    entity.y = oldY;
+                if (len !== 0) {
+                    entity.x += (dx / len) * monsterSpeed;
+                    entity.y += (dy / len) * monsterSpeed;
                 }
             } 
         }

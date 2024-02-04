@@ -13,6 +13,8 @@ import sfxKey from "./assets/key.mp3";
 import sfxWin from "./assets/win.mp3";
 import sfxFail from "./assets/fail.mp3";
 import sfxHurt from "./assets/hurt.mp3";
+import sfxHealUp from "./assets/healup.mp3";
+import sfxSpeedUp from "./assets/speedup.mp3";
 
 import { Entity, EntityType, RUN } from "./entity";
 import { intersects } from "./renderer/util";
@@ -172,6 +174,8 @@ export class GoDungeonGo implements InputEventListener {
     sfxFail: Sound;
     sfxDead: Sound;
     sfxHurt: Sound;
+    sfxHealUp: Sound;
+    sfxSpeedUp: Sound;
 
     playingMusic = false;
 
@@ -189,6 +193,8 @@ export class GoDungeonGo implements InputEventListener {
         this.sfxFail = loadSound(sfxFail);
         this.sfxDead = loadSound(sfxDead);
         this.sfxHurt = loadSound(sfxHurt);
+        this.sfxHealUp = loadSound(sfxHealUp);
+        this.sfxSpeedUp = loadSound(sfxSpeedUp);
 
         this.selectedType = this.typeOptions[Math.floor(Math.random() * this.typeOptions.length)];
     }
@@ -237,6 +243,16 @@ export class GoDungeonGo implements InputEventListener {
                 setTimeout(() => {
                     playSound(this.sfxCountdown);
                 }, 1000);
+            }
+            if (event.type === GameEventType.SPEED_UP) {
+                if (event.who === this.playerId) {
+                    playSound(this.sfxSpeedUp);
+                }
+            }
+            if (event.type === GameEventType.HEAL_UP) {
+                if (event.who === this.playerId) {
+                    playSound(this.sfxHealUp);
+                }
             }
             if (event.type === GameEventType.GOT_HEALTH) {
                 if (event.who === this.playerId) {

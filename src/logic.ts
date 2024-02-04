@@ -49,6 +49,8 @@ export enum GameEventType {
   TIME_OUT = 10,
   DEATH = 11,
   HURT = 12,
+  SPEED_UP = 13,
+  HEAL_UP = 14,
 }
 
 export interface GameEvent {
@@ -182,11 +184,13 @@ Rune.initLogic({
         if (playerEntity.item === "health") {
           playerEntity.item = undefined;
           playerEntity.health = Math.min(3, playerEntity.health + 1);
+          context.game.events.push({ type: GameEventType.HEAL_UP, who: context.playerId });
         }
         if (playerEntity.item === "speed") {
           playerEntity.speedTimeout = Rune.gameTime() + (1000 * 15);
           playerEntity.speed = 15;
           playerEntity.item = undefined;
+          context.game.events.push({ type: GameEventType.SPEED_UP, who: context.playerId });
         }
       }
     },
@@ -249,7 +253,7 @@ Rune.initLogic({
     }
 
     for (let i = 0; i < 4; i++) {
-      for (const entity of context.game.entities) {
+      for (const entity of context.game.entities.filter(e => e.type !== EntityType.MONSTER)) {
         updateEntity(Rune.gameTime(), context.game, entity, 0.25);
         const room = findRoomAt(context.game, entity.x, entity.y);
 
@@ -305,41 +309,42 @@ Rune.initLogic({
         }
       }
     }
+    for (const entity of context.game.entities.filter(e => e.type === EntityType.MONSTER)) {
+      updateEntity(Rune.gameTime(), context.game, entity, 1);
+    }
 
-    for (const entity of context.game.entities) {
+    for (const entity of context.game.entities.filter(e => e.type !== EntityType.MONSTER)) {
       const room = findRoomAt(context.game, entity.x, entity.y);
 
-      if (entity.type !== EntityType.MONSTER) {
-        if (Rune.gameTime() - entity.hurtAt > HURT_GRACE) {
-          const touchingMonster = context.game.entities.find(e => e.type === EntityType.MONSTER && Math.abs(e.x - entity.x) < 16 && Math.abs(e.y - entity.y) < 16);
-          if (touchingMonster) {
-            entity.health--;
-            if (entity.health <= 0) {
-              context.game.events.push({ type: GameEventType.DEATH, who: entity.id });
-              respawn(context.game, entity);
-              continue;
-            } else {
-              entity.hurtAt = Rune.gameTime();
-              context.game.events.push({ type: GameEventType.HURT, who: entity.id });
-            }
+      if (Rune.gameTime() - entity.hurtAt > HURT_GRACE) {
+        const touchingMonster = context.game.entities.find(e => e.type === EntityType.MONSTER && Math.abs(e.x - entity.x) < 16 && Math.abs(e.y - entity.y) < 16);
+        if (touchingMonster) {
+          entity.health--;
+          if (entity.health <= 0) {
+            context.game.events.push({ type: GameEventType.DEATH, who: entity.id });
+            respawn(context.game, entity);
+            continue;
+          } else {
+            entity.hurtAt = Rune.gameTime();
+            context.game.events.push({ type: GameEventType.HURT, who: entity.id });
           }
+        }
 
-          if (room && room.spikes) {
-            const tileX = Math.floor((entity.x - (room.x * 32)) / 32);
-            const tileY = Math.floor((entity.y - (room.y * 32)) / 32);
-            const spikeAtLocation = room.spikeLocations.find(l => l.x === tileX && l.y === tileY);
-            if (spikeAtLocation) {
-              // only get spiked on full up
-              if (getSpikeState(spikeAtLocation.x + room.x, spikeAtLocation.y + room.y, Rune.gameTime()) === 3) {
-                entity.health--;
-                if (entity.health <= 0) {
-                  context.game.events.push({ type: GameEventType.DEATH, who: entity.id });
-                  respawn(context.game, entity);
-                  continue;
-                } else {
-                  entity.hurtAt = Rune.gameTime();
-                  context.game.events.push({ type: GameEventType.HURT, who: entity.id });
-                }
+        if (room && room.spikes) {
+          const tileX = Math.floor((entity.x - (room.x * 32)) / 32);
+          const tileY = Math.floor((entity.y - (room.y * 32)) / 32);
+          const spikeAtLocation = room.spikeLocations.find(l => l.x === tileX && l.y === tileY);
+          if (spikeAtLocation) {
+            // only get spiked on full up
+            if (getSpikeState(spikeAtLocation.x + room.x, spikeAtLocation.y + room.y, Rune.gameTime()) === 3) {
+              entity.health--;
+              if (entity.health <= 0) {
+                context.game.events.push({ type: GameEventType.DEATH, who: entity.id });
+                respawn(context.game, entity);
+                continue;
+              } else {
+                entity.hurtAt = Rune.gameTime();
+                context.game.events.push({ type: GameEventType.HURT, who: entity.id });
               }
             }
           }
