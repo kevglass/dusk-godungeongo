@@ -1,6 +1,6 @@
 import type { OnChangeAction, OnChangeEvent, PlayerId, Players, RuneClient } from "rune-games-sdk/multiplayer"
 import { Controls, Entity, EntityType, IDLE, RUN, createEntity, updateEntity } from "./entity";
-import { Room, closeToCenter, findAllRoomsAt, findRoomAt, generateDungeon } from "./room";
+import { Room, closeToCenter, findRoomAt, generateDungeon } from "./room";
 
 const ROUND_TIME_MINS = 3;
 export const SPIKE_STATES = [0, 0, 0, 0, 0, 0, 1, 2, 3, 2, 1];
@@ -192,7 +192,7 @@ Rune.initLogic({
     },
   },
   events: {
-    playerJoined(playerId, context) {
+    playerJoined() {
       // we don't need to do anything until they select a character type
     },
     playerLeft(playerId, context) {

@@ -1,5 +1,5 @@
 import { GameEventType, GameState, GameUpdate, HURT_GRACE, getSpikeState } from "./logic";
-import { InputEventListener, TileSet, drawImage, drawRect, drawText, drawTile, fillCircle, fillRect, halfCircle, loadImage, loadTileSet, popState, pushState, registerInputEventListener, scale, screenHeight, screenWidth, setAlpha, stringWidth, translate, updateGraphics } from "./renderer/graphics";
+import { InputEventListener, TileSet, drawImage, drawText, drawTile, fillCircle, fillRect, halfCircle, loadImage, loadTileSet, popState, pushState, registerInputEventListener, scale, screenHeight, screenWidth, setAlpha, stringWidth, translate, updateGraphics } from "./renderer/graphics";
 import gfxTilesUrl from "./assets/tileset.png";
 import gfxTilesRedUrl from "./assets/tilesetred.png";
 import gfxTiles2xUrl from "./assets/tileset2x.png";
@@ -16,16 +16,16 @@ import sfxHurt from "./assets/hurt.mp3";
 
 import { Entity, EntityType, RUN } from "./entity";
 import { intersects } from "./renderer/util";
-import { Direction, Room, findAllRoomsAt, findRoomAt, inRoomSpace } from "./room";
+import { Direction, Room, findAllRoomsAt, findRoomAt } from "./room";
 import { InterpolatorLatency, Players } from "rune-games-sdk";
-import { Sound, loadSound, loopSound, playSound } from "./renderer/sound";
+import { Sound, loadSound, playSound } from "./renderer/sound";
 
 function seededRandom(a: number) {
-    return function() {
-      a |= 0; a = a + 0x9e3779b9 | 0;
-      var t = a ^ a >>> 16; t = Math.imul(t, 0x21f0aaad);
-          t = t ^ t >>> 15; t = Math.imul(t, 0x735a2d97);
-      return ((t = t ^ t >>> 15) >>> 0) / 4294967296;
+    return function () {
+        a |= 0; a = a + 0x9e3779b9 | 0;
+        let t = a ^ a >>> 16; t = Math.imul(t, 0x21f0aaad);
+        t = t ^ t >>> 15; t = Math.imul(t, 0x735a2d97);
+        return ((t = t ^ t >>> 15) >>> 0) / 4294967296;
     }
 }
 
@@ -51,7 +51,7 @@ const WALL_MAP: number[] = [];
 
 const RNG = seededRandom(12345);
 
-for (let i=0;i<1000;i++) {
+for (let i = 0; i < 1000; i++) {
     FLOOR_MAP[i] = FLOOR_VARIANTS[Math.floor(RNG() * FLOOR_VARIANTS.length)];
     WALL_MAP[i] = WALL_VARIANTS[Math.floor(RNG() * WALL_VARIANTS.length)];
 }
@@ -157,12 +157,12 @@ export class GoDungeonGo implements InputEventListener {
     avatarImages: Record<string, HTMLImageElement> = {}
     logo: HTMLImageElement;
 
-    dpadCenterY: number = -1;
-    dpadCenterX: number = -1;
+    dpadCenterY = -1;
+    dpadCenterX = -1;
     selectedType: EntityType = EntityType.PINK_KNIGHT;
     typeOptions: EntityType[] = [EntityType.FEMALE_ELF, EntityType.PINK_KNIGHT, EntityType.MALE_ELF, EntityType.FEMALE_MAGE, EntityType.MALE_MAGE, EntityType.DINO1, EntityType.ORANGE_KNIGHT, EntityType.DINO2, EntityType.FACE_GUY, EntityType.ORC, EntityType.ORC_CHIEF, EntityType.SKELLY];
 
-    frame: number = 0;
+    frame = 0;
     effects: CollectEffect[] = [];
 
     sfxKey: Sound;
@@ -173,8 +173,8 @@ export class GoDungeonGo implements InputEventListener {
     sfxDead: Sound;
     sfxHurt: Sound;
 
-    playingMusic: boolean = false;
-    
+    playingMusic = false;
+
     constructor() {
         this.tiles = loadTileSet(gfxTilesUrl, 32, 32);
         this.tilesRed = loadTileSet(gfxTilesRedUrl, 32, 32);
@@ -288,7 +288,7 @@ export class GoDungeonGo implements InputEventListener {
             }
         }
 
-        // update any particle effects
+        // update any particle effects
         for (const p of [...this.effects]) {
             p.life -= 1;
             if (p.life < 0) {
