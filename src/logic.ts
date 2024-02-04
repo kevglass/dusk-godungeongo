@@ -2,7 +2,12 @@ import type { OnChangeAction, OnChangeEvent, PlayerId, Players, RuneClient } fro
 import { Controls, Entity, EntityType, IDLE, RUN, createEntity, updateEntity } from "./entity";
 import { Room, closeToCenter, findRoomAt, generateDungeon } from "./room";
 
-const ROUND_TIME_MINS = 3;
+// The amount of time given for a round of play. If they don't
+// find the egg in this time then the game is over and no 
+// one wins.
+const ROUND_TIME_MINS = 2.5;
+// The states that the spiked floors can be - rudimentary timing
+// on the down state
 export const SPIKE_STATES = [0, 0, 0, 0, 0, 0, 1, 2, 3, 2, 1];
 // 2 seconds grace allowance after getting hurt
 export const HURT_GRACE = 2000;
@@ -20,49 +25,95 @@ export type GameUpdate = {
   futureGame?: GameState;
 };
 
+// The state thats synchronized by running the logic
+// on each end point and applying actions through the
+// Rune SDK
 export interface GameState {
+  // The list of entities (players or monsters) in the world
   entities: Entity[];
+  // The rooms that build up our dungeon
   rooms: Room[];
+  // The room that players start in
   startRoom: number;
-  scores: Record<string, number>;
+  // The scores keyed on Player ID
+  scores: Record<PlayerId, number>;
+  // True if the players are waiting at the start to begin the race
   atStart: boolean;
+  // The time at which the race should start - lets us do the countdown
   startRace: number;
-  winner?: string;
+  // The player ID of the winner of the race - who found the egg
+  winner?: PlayerId;
+  // The status message to display at the top of the screen while 
+  // at the start
   statusMessage: string;
+  // The count down number to be displayed because it was easier
+  // to keep it here than calc on the clients
   countDown: number;
+  // The time at which the game is considered over - i.e. when
+  // everyone loses 
   endGameTime: number;
+  // True if the game is completed
   gameOver: boolean;
+  // The time at which the game was completed - pause for restart
   gameOverTime: number;
+  // A list of events that have occurred in the game loop so the
+  // client can render effects and play sounds related
   events: GameEvent[];
 }
 
+// Game Events report things that have happened in the game logic
+// so the renderer can take action (effects/sfx/etc)
 export enum GameEventType {
+  // Game restarted
   RESTART = 1,
+  // Player got a treasure box
   GOT_TREASURE = 2,
+  // Player got the bronze key
   GOT_BRONZE = 3,
+  // Player got the silver key
   GOT_SILVER = 4,
+  // Player got the gold key
   GOT_GOLD = 5,
+  // Player got a speed potion
   GOT_SPEED = 6,
+  // Player got a health potion
   GOT_HEALTH = 7,
+  // The count down to begin the race was started
   START_COUNTDOWN = 8,
+  // Somebody won the game
   WIN = 9,
+  // The timer ran out
   TIME_OUT = 10,
+  // A player died
   DEATH = 11,
+  // A player was hurt
   HURT = 12,
+  // A player used a speed up potion
   SPEED_UP = 13,
+  // A player used a heal potion
   HEAL_UP = 14,
 }
 
+// Simple game event to let the renderer know when game loop events
+// have taken place
 export interface GameEvent {
+  // the type of the event
   type: GameEventType;
+  // The entity ID who the event happened to
   who?: string;
+  // The x tile position where the event happened
   x?: number;
+  // The y tile position where the event happened
   y?: number;
 }
 
+// Actions that the renderer can apply to the Rune game state
 type GameActions = {
+  // A player has joined the game and selected a player type
   join: (params: { type: EntityType }) => void;
+  // A player has changed their control state
   applyControls: (controls: Controls) => void;
+  // A player uses the item they are holding
   useItem: () => void;
 }
 
@@ -70,15 +121,21 @@ declare global {
   const Rune: RuneClient<GameState, GameActions>
 }
 
+// Get the state of a spike at a given location. This is a deterministic
+// function based on the world position of the spike and the game time
+// and allows us to sync up the states everywhere
 export function getSpikeState(x: number, y: number, time: number): number {
   const index = Math.abs(Math.floor(x + (y * 100) + (time / 200)));
   return SPIKE_STATES[index % SPIKE_STATES.length];
 }
 
+// Get the number of players in the game
 export function getPlayerCount(state: GameState) {
   return state.entities.filter(e => e.type !== EntityType.MONSTER).length;
 }
 
+// Utility to create a player entity and place it in the start room. This is used
+// at game start and for respawn.
 function createPlayerEntity(state: GameState, playerId: string, type: EntityType): Entity | undefined {
   const startRoom = state.rooms.find(r => r.id === state.startRoom);
 
@@ -94,9 +151,12 @@ function createPlayerEntity(state: GameState, playerId: string, type: EntityType
   }
 }
 
+// Utility to respawn a player when they die
 function respawn(state: GameState, entity: Entity) {
   state.entities.splice(state.entities.indexOf(entity), 1);
   const newPlayer = createPlayerEntity(state, entity.id, entity.type);
+
+  // we keep the keys we've collected on respawn
   if (newPlayer) {
     newPlayer.bronzeKey = entity.bronzeKey;
     newPlayer.goldKey = entity.goldKey;
@@ -104,6 +164,8 @@ function respawn(state: GameState, entity: Entity) {
   }
 }
 
+// Start a game, generate a dungeon, initialize the game state
+// and set up entities for any existing players
 function startGame(state: GameState) {
   state.winner = undefined;
   state.atStart = true;
@@ -131,6 +193,7 @@ function startGame(state: GameState) {
 Rune.initLogic({
   minPlayers: 1,
   maxPlayers: 4,
+  // setup initial state object and start the game
   setup: (): GameState => {
     const initialState = {
       entities: [],
@@ -153,10 +216,13 @@ Rune.initLogic({
   },
   updatesPerSecond: 30,
   actions: {
+    // player joins the game having selected an entity. Create the player 
+    // entity in the start room with the right sprite and reset their score
     join: (params: { type: EntityType }, context) => {
       createPlayerEntity(context.game, context.playerId, params.type);
       context.game.scores[context.playerId] = 0;
     },
+    // update the player controls based on input from the client
     applyControls: (controls: Controls, context) => {
       const playerEntity = context.game.entities.find(e => e.id === context.playerId);
       if (playerEntity) {
@@ -178,6 +244,7 @@ Rune.initLogic({
         }
       }
     },
+    // use the item a player is holding. 
     useItem(params, context) {
       const playerEntity = context.game.entities.find(e => e.id === context.playerId);
       if (playerEntity) {
@@ -200,6 +267,7 @@ Rune.initLogic({
       // we don't need to do anything until they select a character type
     },
     playerLeft(playerId, context) {
+      // clean up any entity assigned to the player leaving
       const toRemove = context.game.entities.find(e => e.id === playerId);
       if (toRemove) {
         context.game.entities.splice(context.game.entities.indexOf(toRemove), 1);
@@ -207,6 +275,7 @@ Rune.initLogic({
     }
   },
   update: (context) => {
+    // clear the events list for this frame
     context.game.events = [];
 
     // if we've shown the game over message for long enough then reset the game
@@ -252,6 +321,8 @@ Rune.initLogic({
       }
     }
 
+    // move all the non-monster entities in a quarter step at a time
+    // to check for collision along the way
     for (let i = 0; i < 4; i++) {
       for (const entity of context.game.entities.filter(e => e.type !== EntityType.MONSTER)) {
         updateEntity(Rune.gameTime(), context.game, entity, 0.25);
@@ -309,14 +380,23 @@ Rune.initLogic({
         }
       }
     }
+
+    // update all the monster entities with a flat 1 step update since they
+    // don't do collision
     for (const entity of context.game.entities.filter(e => e.type === EntityType.MONSTER)) {
       updateEntity(Rune.gameTime(), context.game, entity, 1);
     }
 
+    // check to see if the players are hitting anything that can hurt them 
+    // if they are apply the health change and potential respawn
     for (const entity of context.game.entities.filter(e => e.type !== EntityType.MONSTER)) {
       const room = findRoomAt(context.game, entity.x, entity.y);
 
+      // players can only be hurt every couple of seconds. They'll go into the traditional 
+      // flashing state while in grace
       if (Rune.gameTime() - entity.hurtAt > HURT_GRACE) {
+        // find any monsters that are close enough to damage the player - if there
+        // is one then apply the health change
         const touchingMonster = context.game.entities.find(e => e.type === EntityType.MONSTER && Math.abs(e.x - entity.x) < 16 && Math.abs(e.y - entity.y) < 16);
         if (touchingMonster) {
           entity.health--;
@@ -330,6 +410,9 @@ Rune.initLogic({
           }
         }
 
+        // if the room the player is in has spikes check to see
+        // if they're standing on one. If so check to see if the spike
+        // is in the up position (3). Apply any damage
         if (room && room.spikes) {
           const tileX = Math.floor((entity.x - (room.x * 32)) / 32);
           const tileY = Math.floor((entity.y - (room.y * 32)) / 32);

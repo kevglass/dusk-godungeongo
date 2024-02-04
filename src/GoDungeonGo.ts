@@ -16,12 +16,15 @@ import sfxHurt from "./assets/hurt.mp3";
 import sfxHealUp from "./assets/healup.mp3";
 import sfxSpeedUp from "./assets/speedup.mp3";
 
-import { Entity, EntityType, RUN } from "./entity";
+import { Controls, Entity, EntityType, RUN } from "./entity";
 import { intersects } from "./renderer/util";
 import { Direction, Room, findAllRoomsAt, findRoomAt } from "./room";
 import { InterpolatorLatency, Players } from "rune-games-sdk";
 import { Sound, loadSound, playSound } from "./renderer/sound";
 
+// a predictable random used to generate the random
+// tiles that build up the world. Same seed
+// everywhere = same tiles everywhere
 function seededRandom(a: number) {
     return function () {
         a |= 0; a = a + 0x9e3779b9 | 0;
@@ -31,13 +34,19 @@ function seededRandom(a: number) {
     }
 }
 
+// The puffs of smoke/dust that appear behind the player
+// as they run around
+
+// The time the puffs last for
 const PUFF_TIME = 250;
+// colors for normal running
 const PUFF_COLORS = [
     "rgba(255,255,255,0.5)",
     "rgba(230,230,230,0.5)",
     "rgba(200,200,200,0.5)",
     "rgba(180,180,180,0.5)"
 ];
+// colors for speed running
 const SPEED_PUFF_COLORS = [
     "rgba(100,100,255,0.7)",
     "rgba(100,100,230,0.7)",
@@ -45,12 +54,20 @@ const SPEED_PUFF_COLORS = [
     "rgba(100,100,180,0.7)"
 ];
 
+// The tile indices for the different floors available. Repeats are to up the chances
+// of that tile being picked 
 const FLOOR_VARIANTS = [64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 65, 66, 80, 81, 82];
+// The tile indices for the different floors walls. Repeats are to up the chances
+// of that tile being picked 
 const WALL_VARIANTS = [16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 32, 33, 34, 48, 49, 50];
 
+// A random list of floor tiles used to generate an interesting dungeon
 const FLOOR_MAP: number[] = [];
+// A random list of wall tiles used to generate an interesting dungeon
 const WALL_MAP: number[] = [];
 
+// a seeded random number generate used to keep the floor/wall variations consistent 
+// between clients
 const RNG = seededRandom(12345);
 
 for (let i = 0; i < 1000; i++) {
@@ -58,6 +75,8 @@ for (let i = 0; i < 1000; i++) {
     WALL_MAP[i] = WALL_VARIANTS[Math.floor(RNG() * WALL_VARIANTS.length)];
 }
 
+// the character names for each fo the different sprites. Humour
+// central.
 const CHAR_NAMES: Record<EntityType, string> = {
     [EntityType.MONSTER]: "",
     [EntityType.FEMALE_ELF]: "Awen",
@@ -74,31 +93,49 @@ const CHAR_NAMES: Record<EntityType, string> = {
     [EntityType.SKELLY]: "Boney",
 }
 
+// A puff of smoke/dust behind the player while they run
 interface Puff {
+    // the x position in the game world of the puff
     x: number;
+    // the y position in the game world of the puff
     y: number;
+    // the time at which the puff should disappear
     dieAt: number;
+    // The size of the puff
     size: number;
+    // the offset from the position of the puff
     offset: number;
+    // The color of the puff
     col: string;
+    // The color to use if the player is using a speed potion
     speedCol: string;
 }
 
+// Renderer representation of an entity. Using a Rune interpolator 
+// to smooth out movement
 export class EntitySprite {
+    // the animation frame
     frame = 0;
+    // the interpolator used to smooth movement
     interpolator: InterpolatorLatency<number[]>
+    // the last few locations where the puffs of smoke are generated
     lastFrames: Puff[] = [];
-    lastX = -1;
-    lastY = -1;
 
     constructor() {
         this.interpolator = Rune.interpolatorLatency({ maxSpeed: 15 })
     }
 
-    update(x: number, y: number) {
-        if (this.lastX !== x || this.lastY !== y) {
+    update(x: number, y: number, controls: Controls) {
+        // generate some puffs of smoke based on the current
+        // movement 
+        const controlsDown = Object.values(controls).filter(e => e).length;
+
+        if (controlsDown) {
+            const lastX = controls.left ? x + 5 : controls.right ? x - 5 : x;
+            const lastY = controls.up ? y + 5 : controls.down ? y - 5 : y;
+
             this.lastFrames.push({
-                x: (x + this.lastX) / 2, y: (y + this.lastY) / 2, dieAt: Rune.gameTime() + PUFF_TIME,
+                x: (x + lastX) / 2, y: (y + lastY) / 2, dieAt: Rune.gameTime() + PUFF_TIME,
                 size: 5 + Math.floor(Math.random() * 7), offset: -1 + Math.floor(Math.random() * 3),
                 speedCol: SPEED_PUFF_COLORS[Math.floor(Math.random() * PUFF_COLORS.length)],
                 col: PUFF_COLORS[Math.floor(Math.random() * PUFF_COLORS.length)]
@@ -111,75 +148,137 @@ export class EntitySprite {
             });
         }
         this.lastFrames = this.lastFrames.filter(f => f.dieAt > Rune.gameTime());
-        this.lastX = x;
-        this.lastY = y;
     }
 }
 
+// Renderer representation of the data model's 
+// room. Used to record which rooms the local player
+// has discovered and the fade as they appear.
+// Note: Players see all rooms discovered by any player on the
+//       the mini-map but only see rooms they have discovered
+//       in the actual game room
 export class LocalRoom {
+    // True if the room has been discovered by the local player
     discovered = false;
+    // The fade in alpha value for the room appearing
     fade = 0;
 }
 
+// Effect of a picking something up. Grow the sprite and fade
+// out on pick up
 interface CollectEffect {
+    // The x coordinate in pixels in the game world of the effect
     x: number;
+    // The x coordinate in pixels in the game world of the effect
     y: number;
+    // The sprite/tile to display
     tile: number;
+    // The life of the effect remaining - used to scale the sprite
+    // up and fade it out
     life: number;
 }
 
+// 
+// GO DUNGEON GO! 
+//
+// It's a race round the dungeon. All players start in the same room and have to 
+// find 3 keys to unlock the door to the egg room. First to the egg wins.
+//
+// As players explore the mini-map updates for everyone, so the first player to find 
+// the gold key has also given it's location away to the other players etc.
+//
 export class GoDungeonGo implements InputEventListener {
+    // 2x scaled up versions of the tile set, saves us doing any scaling manipulation
+    // at runtime.
     tiles2x: TileSet;
+    // The tile set being used to render the game
     tiles: TileSet;
+    // A red tinted version of the tiles used when someone gets hurt. Again saves run
+    // time tinting.
     tilesRed: TileSet;
+    // The directional pad graphic
     dpad: TileSet;
+    // The button graphic
     button: TileSet;
 
+    // The latest game state received 
     game?: GameState;
+    // True if we've joined the game
     joined = false;
+    // The size of the dpad and button on the screen. Proportional to screen size
     controlSize = 0;
+    // padding from the edge of the screen for the controls
     controlHorizontalPadding = 0;
+    // padding from the edge of the screen for the controls
     controlVerticalPadding = 0;
+    // The ID of the local player in the shared game world
     playerId?: string;
 
+    // The x coordinate of the view/camera location
     viewX = 0;
+    // The y coordinate of the view/camera location
     viewY = 0;
 
+    // The ID of the touch that is active on the dpad at the moment
     touchInDpad = -1;
 
+    // True if the player is trying ot move left
     left = false;
+    // True if the player is trying ot move right
     right = false;
+    // True if the player is trying ot move down
     down = false;
+    // True if the player is trying ot move up
     up = false;
 
+    // A collection of renderer representations of the entities in the game, keyed on the entity ID
     entitySprites: Record<string, EntitySprite> = {};
+    // A collection of renderer representations of the rooms in the game, keyed on Room ID
     localRooms: Record<number, LocalRoom> = {};
 
+    // The list of players that joined the Rune room
     players?: Players;
+    // The images for the avatars provided by Rune
     avatarImages: Record<string, HTMLImageElement> = {}
+    // The game logo 
     logo: HTMLImageElement;
 
+    // the current centre of the dpad. When the player touches the screen the dpad centre is set.
     dpadCenterY = -1;
+    // the current centre of the dpad. When the player touches the screen the dpad centre is set.
     dpadCenterX = -1;
+    // the character the player has selected
     selectedType: EntityType = EntityType.PINK_KNIGHT;
+    // the list of potential characters
     typeOptions: EntityType[] = [EntityType.FEMALE_ELF, EntityType.PINK_KNIGHT, EntityType.MALE_ELF, EntityType.FEMALE_MAGE, EntityType.MALE_MAGE, EntityType.DINO1, EntityType.ORANGE_KNIGHT, EntityType.DINO2, EntityType.FACE_GUY, EntityType.ORC, EntityType.ORC_CHIEF, EntityType.SKELLY];
 
+    // animation frame for the start up screen
     frame = 0;
+
+    // the list of pick up effects that are currently rendered. 
     effects: CollectEffect[] = [];
 
+    // sound for picking up a key
     sfxKey: Sound;
+    // sound for collecting an item
     sfxCollect: Sound;
+    // sound for the countdown beeps
     sfxCountdown: Sound;
+    // sound for when we win
     sfxWin: Sound;
+    // sound for when we run out of time
     sfxFail: Sound;
+    // sound for a player death
     sfxDead: Sound;
+    // sound for a player getting hurt
     sfxHurt: Sound;
+    // sound for when a player drinks a heal potion
     sfxHealUp: Sound;
+    // sound for when a player drinks a speed potion
     sfxSpeedUp: Sound;
 
-    playingMusic = false;
-
     constructor() {
+        // load all the resources
         this.tiles = loadTileSet(gfxTilesUrl, 32, 32);
         this.tilesRed = loadTileSet(gfxTilesRedUrl, 32, 32);
         this.tiles2x = loadTileSet(gfxTiles2xUrl, 64, 64);
@@ -196,35 +295,46 @@ export class GoDungeonGo implements InputEventListener {
         this.sfxHealUp = loadSound(sfxHealUp);
         this.sfxSpeedUp = loadSound(sfxSpeedUp);
 
+        // select a random type, might help players get familiar with possible characters
         this.selectedType = this.typeOptions[Math.floor(Math.random() * this.typeOptions.length)];
     }
 
+    // start the game
     start(): void {
         // register ourselves as the input listener so
         // we get nofified of mouse presses
         registerInputEventListener(this);
 
+        // tell rune to let us know when a game
+        // update happens
         Rune.initClient({
             onChange: (update) => {
                 this.gameUpdate(update);
             },
         });
 
+        // start the rendering loop
         requestAnimationFrame(() => { this.loop() });
     }
 
+    // notification of a new game state from the Rune SDK
     gameUpdate(update: GameUpdate) {
+        // process any events that have taken place
         for (const event of update.game.events) {
+            // when the game restart we need to clear up our 
+            // representation of the world
             if (event.type === GameEventType.RESTART) {
                 this.entitySprites = {};
                 this.localRooms = {};
                 this.effects = [];
             }
+            // if we got hurt play the SFX
             if (event.type === GameEventType.HURT) {
                 if (event.who === this.playerId) {
                     playSound(this.sfxHurt);
                 }
             }
+            // if we died play the SFX
             if (event.type === GameEventType.DEATH) {
                 if (event.who === this.playerId) {
                     playSound(this.sfxDead);
@@ -233,27 +343,34 @@ export class GoDungeonGo implements InputEventListener {
                     delete this.entitySprites[event.who];
                 }
             }
+            // play the win SFX
             if (event.type === GameEventType.WIN) {
                 playSound(this.sfxWin);
             }
+            // play the ran out of time SFX
             if (event.type === GameEventType.TIME_OUT) {
                 playSound(this.sfxFail);
             }
             if (event.type === GameEventType.START_COUNTDOWN) {
+                // delay the countdown by one second since for 
+                // some reason it only has 5 beeps 
                 setTimeout(() => {
                     playSound(this.sfxCountdown);
                 }, 1000);
             }
+            // if we used a speed potion play the sound
             if (event.type === GameEventType.SPEED_UP) {
                 if (event.who === this.playerId) {
                     playSound(this.sfxSpeedUp);
                 }
             }
+            // if we used a heal potion play the sound
             if (event.type === GameEventType.HEAL_UP) {
                 if (event.who === this.playerId) {
                     playSound(this.sfxHealUp);
                 }
             }
+            // if its us who picked up the item play the SFX and run the effect
             if (event.type === GameEventType.GOT_HEALTH) {
                 if (event.who === this.playerId) {
                     if (event.x && event.y) {
@@ -262,6 +379,7 @@ export class GoDungeonGo implements InputEventListener {
                     playSound(this.sfxCollect);
                 }
             }
+            // if its us who picked up the item play the SFX and run the effect
             if (event.type === GameEventType.GOT_SPEED) {
                 if (event.who === this.playerId) {
                     if (event.x && event.y) {
@@ -270,6 +388,7 @@ export class GoDungeonGo implements InputEventListener {
                     playSound(this.sfxCollect);
                 }
             }
+            // if its us who picked up the item play the SFX and run the effect
             if (event.type === GameEventType.GOT_TREASURE) {
                 if (event.who === this.playerId) {
                     if (event.x && event.y) {
@@ -278,6 +397,7 @@ export class GoDungeonGo implements InputEventListener {
                     playSound(this.sfxCollect);
                 }
             }
+            // if its us who picked up the item play the SFX and run the effect
             if (event.type === GameEventType.GOT_BRONZE) {
                 if (event.who === this.playerId) {
                     if (event.x && event.y) {
@@ -286,6 +406,7 @@ export class GoDungeonGo implements InputEventListener {
                     playSound(this.sfxKey);
                 }
             }
+            // if its us who picked up the item play the SFX and run the effect
             if (event.type === GameEventType.GOT_SILVER) {
                 if (event.who === this.playerId) {
                     if (event.x && event.y) {
@@ -294,6 +415,7 @@ export class GoDungeonGo implements InputEventListener {
                     playSound(this.sfxKey);
                 }
             }
+            // if its us who picked up the item play the SFX and run the effect
             if (event.type === GameEventType.GOT_GOLD) {
                 if (event.who === this.playerId) {
                     if (event.x && event.y) {
@@ -304,7 +426,7 @@ export class GoDungeonGo implements InputEventListener {
             }
         }
 
-        // update any particle effects
+        // update any pick up effects
         for (const p of [...this.effects]) {
             p.life -= 1;
             if (p.life < 0) {
@@ -312,31 +434,42 @@ export class GoDungeonGo implements InputEventListener {
             }
         }
 
-        // do nothing
+        // record our current game state and the state
+        // of the players in the game
         this.game = update.game;
         this.playerId = update.yourPlayerId;
         this.players = update.players;
 
+        // load any avatar images we haven't already got
         for (const playerId in update.players) {
             if (!this.avatarImages[playerId]) {
                 this.avatarImages[playerId] = loadImage(update.players[playerId].avatarUrl);
             }
         }
 
+        // cause the entities in the game to update 
+        // to match the current game state.
         for (const entity of this.game.entities) {
             let sprite = this.entitySprites[entity.id];
             if (!sprite) {
                 sprite = this.entitySprites[entity.id] = new EntitySprite();
             }
 
-            // if its our entity don't interpolate, we know we're already right
-            const futureEntity = entity.id === update.yourPlayerId ? entity : update.futureGame?.entities.find(e => e.id === entity.id);
+            const futureEntity = update.futureGame?.entities.find(e => e.id === entity.id);
 
             if (futureEntity) {
                 sprite.interpolator.update({
                     game: [entity.x, entity.y],
                     futureGame: [futureEntity.x, futureEntity.y]
                 });
+
+                // if its the local entity then we just want to use the new position
+                // it'll always ben up to date
+                if (entity.id === this.playerId) {
+                    sprite.interpolator.jump(
+                        [futureEntity.x, futureEntity.y]
+                    );
+                }
             }
         }
 
@@ -346,6 +479,8 @@ export class GoDungeonGo implements InputEventListener {
             delete this.entitySprites[id];
         }
 
+        // generate local room representations if they don't
+        // already exist
         for (const room of this.game.rooms) {
             let local = this.localRooms[room.id];
             if (!local) {
@@ -354,6 +489,9 @@ export class GoDungeonGo implements InputEventListener {
         }
     }
 
+    // process a move/drag over the DPAD and convert it 
+    // to a set of controls. If the controls have
+    // changed apply the action
     processDPad(x: number, y: number) {
         if (this.game) {
             const dx = x - this.dpadCenterX;
@@ -391,6 +529,7 @@ export class GoDungeonGo implements InputEventListener {
         }
     }
 
+    // Notification of a mouse press or touch start
     mouseDown(x: number, y: number, index: number): void {
         if (this.joined) {
             const controlsY = screenHeight() - this.controlSize - this.controlVerticalPadding;
@@ -410,21 +549,23 @@ export class GoDungeonGo implements InputEventListener {
         }
     }
 
+    // Notification of a mouse drag or a touch move
     mouseDrag(x: number, y: number, index: number): void {
         if (this.joined) {
+            // if its the touch thats currently controlling the dpad
+            // then process the input
             if (index === this.touchInDpad) {
                 this.processDPad(x, y);
             }
         }
     }
 
+    // Notification of a mouse up or a touch end
     mouseUp(x: number, y: number, index: number): void {
-        if (!this.playingMusic) {
-            this.playingMusic = true;
-        }
-
         // do nothing
         if (!this.joined) {
+            // do the buttons on the front page for character
+            // selection
             if (x < 84) {
                 // left press
                 let index = this.typeOptions.indexOf(this.selectedType);
@@ -446,6 +587,9 @@ export class GoDungeonGo implements InputEventListener {
                 this.joined = true;
             }
         } else {
+            // if the touch/mouse ended for the ID currently
+            // controlling the DPAD then clear all the controls (they
+            // lifted their thumb off)
             if (index === this.touchInDpad) {
                 this.touchInDpad = -1;
                 if (this.game) {
@@ -458,6 +602,8 @@ export class GoDungeonGo implements InputEventListener {
         }
     }
 
+    // notification of a key press - this isn't relevant to mobile Rune, but is used for testing
+    // in the emulator
     keyDown(key: string): void {
         if (this.game) {
             const myEntity = this.game.entities.find(e => e.id === this.playerId);
@@ -485,6 +631,8 @@ export class GoDungeonGo implements InputEventListener {
         }
     }
 
+    // notification of a key release - this isn't relevant to mobile Rune, but is used for testing
+    // in the emulator
     keyUp(key: string): void {
         if (this.game) {
             const myEntity = this.game.entities.find(e => e.id === this.playerId);
@@ -509,6 +657,10 @@ export class GoDungeonGo implements InputEventListener {
         }
     }
 
+    // Draw a room in the world. Normally I'd do this a rendering a tile map, but in this case
+    // I decided to model the rooms as objects and render the tiles based on the room's existence
+    // rather than tile by tile from a tile map. This is useful for keeping state small but makes
+    // collision uncomfortably slow.
     drawRoom(room: Room): void {
         let myEntity: Entity | undefined;
 
@@ -518,12 +670,15 @@ export class GoDungeonGo implements InputEventListener {
 
         pushState();
         translate(room.x * 32, room.y * 32);
+
+        // render the floor
         for (let x = 0; x < room.width; x++) {
             for (let y = 0; y < room.height; y++) {
                 drawTile(this.tiles, x * 32, y * 32, FLOOR_MAP[Math.abs((x * y) % FLOOR_MAP.length)]);
             }
         }
 
+        // render top/bottom walls
         for (let x = 1; x < room.width - 1; x++) {
             drawTile(this.tiles, x * 32, -32, 0);
             drawTile(this.tiles, x * 32, 0, WALL_MAP[Math.abs((x * room.y) % WALL_MAP.length)]);
@@ -531,6 +686,7 @@ export class GoDungeonGo implements InputEventListener {
             drawTile(this.tiles, x * 32, (room.height * 32), 16);
         }
 
+        // render left/right walls
         for (let y = 1; y < room.height - 1; y++) {
             drawTile(this.tiles, 0, y * 32, 129);
             drawTile(this.tiles, (room.width * 32) - 32, y * 32, 128);
@@ -653,6 +809,7 @@ export class GoDungeonGo implements InputEventListener {
             }
         }
 
+        // render any item in the world
         if (room.item === "treasure") {
             drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 6);
         }
@@ -675,8 +832,12 @@ export class GoDungeonGo implements InputEventListener {
             drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16) - 32, 22);
             drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 38);
         }
+        
+        // if there are spikes render them
         if (room.spikes) {
             for (const location of room.spikeLocations) {
+                // get the spike state and render the appropriate sprite to have
+                // the spikes popping in and out
                 const frame = getSpikeState(location.x + room.x, location.y + room.y, Rune.gameTime());
                 drawTile(this.tiles, location.x * 32, location.y * 32, 176 + frame);
             }
@@ -695,6 +856,7 @@ export class GoDungeonGo implements InputEventListener {
     }
 
     loop(): void {
+        // calculate the controls size based on the screen size
         this.controlSize = screenWidth() / 5;
         this.controlHorizontalPadding = this.controlSize / 2
         this.controlVerticalPadding = this.controlSize * 0.7;
@@ -730,8 +892,10 @@ export class GoDungeonGo implements InputEventListener {
                 pushState();
                 translate(-this.viewX, -this.viewY);
 
+                // render all the rooms
                 for (const room of this.game.rooms) {
                     if (myEntity) {
+                        // very simple culling of rooms that are off screen.
                         const dx = Math.abs((room.x * 32) - myEntity.x)
                         const dy = Math.abs((room.y * 32) - myEntity.y);
                         if (dx > screenWidth() * 2 || dy > screenHeight() * 2) {
@@ -741,11 +905,16 @@ export class GoDungeonGo implements InputEventListener {
 
                     const localRoom = this.localRooms[room.id];
                     if (localRoom && localRoom.discovered) {
+                        // if the room is fading in on discovery then apply the alpha
                         setAlpha(localRoom.fade);
                         this.drawRoom(room);
                         setAlpha(1);
                     }
                 }
+
+
+                // render the entities in y order to make them go behind/in front
+                // of each other.
                 const ysort = [...this.game.entities];
                 ysort.sort((a, b) => a.y - b.y);
 
@@ -753,10 +922,15 @@ export class GoDungeonGo implements InputEventListener {
                     const room = findRoomAt(this.game, entity.x, entity.y);
                     if (room) {
                         const localRoom = this.localRooms[room.id];
+                        // only render an entity if the room its in has been
+                        // discovered by this player
                         if (localRoom && localRoom.discovered) {
+                            // use the interpolator to get the position
+                            // to keep movement of remote entities smooth
                             const sprite = this.entitySprites[entity.id];
-                            sprite.update(sprite.interpolator.getPosition()[0], sprite.interpolator.getPosition()[1]);
+                            sprite.update(sprite.interpolator.getPosition()[0], sprite.interpolator.getPosition()[1], entity.controls);
 
+                            // move the animation forward
                             sprite.frame += 0.1;
                             if (sprite.frame >= entity.anim.count) {
                                 sprite.frame = 0;
@@ -778,18 +952,23 @@ export class GoDungeonGo implements InputEventListener {
                                 }
                             }
 
+                            // draw the actual character 
                             translate(sprite.interpolator.getPosition()[0] - 16, sprite.interpolator.getPosition()[1] - 32);
+
+                            // render the player's name
                             if (this.players && this.players[entity.id]) {
                                 const name = this.players[entity.id].displayName;
                                 drawText(16 - Math.floor(stringWidth(name, 10) / 2), - 15, name, 10, "black");
                                 drawText(16 - Math.floor(stringWidth(name, 10) / 2), - 16, name, 10, "white");
                             }
+                            // flip it for changing direction
                             if (entity.faceLeft) {
                                 scale(-1, 1);
                                 translate(-32, 0);
                             }
 
                             let tiles = this.tiles;
+                            // use the red set if the player is hurt
                             if (Rune.gameTime() - entity.hurtAt < HURT_GRACE) {
                                 const sinceHurt = Rune.gameTime() - entity.hurtAt;
                                 if (Math.floor(sinceHurt / 200) % 2 === 0) {
@@ -804,6 +983,7 @@ export class GoDungeonGo implements InputEventListener {
                     }
                 }
 
+                // render all the pick up effects
                 for (const p of this.effects) {
                     pushState();
                     setAlpha(Math.min(1, p.life / 30));
@@ -1007,6 +1187,7 @@ export class GoDungeonGo implements InputEventListener {
             }
         }
 
+        // continue the loop on the next screen update
         requestAnimationFrame(() => { this.loop() });
     }
 }

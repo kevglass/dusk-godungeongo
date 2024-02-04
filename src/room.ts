@@ -1,6 +1,7 @@
 import { EntityType, createEntity } from "./entity";
 import { GameState } from "./logic";
 
+// Directions used while generating dungeons.
 export enum Direction {
     NORTH = 1,
     SOUTH = 2,
@@ -8,26 +9,44 @@ export enum Direction {
     WEST = 4
 }
 
+// The location of a spike trap relative
+// to the room its in. x/y in tiles not pixels
 export interface SpikeLocation {
     x: number;
     y: number;
 }
 
+// A room in our generated dungeon
 export interface Room {
+    // Unique ID for the room
     id: number;
+    // The x position of the room in tiles (one tile = 32 pixels atm)
     x: number;
+    // The y position of the room in tiles (one tile = 32 pixels atm)
     y: number;
+    // The width of the room in tiles (one tile = 32 pixels atm)
     width: number;
+    // The height of the room in tiles (one tile = 32 pixels atm)
     height: number;
+    // Map from direction to room ID of connected room
     connections: Record<number, number>;
+    // Map from direction to indicator of a door being present 
     doors: Record<number, boolean>;
+    // The distance of this room from the start
     depth: number;
+    // True if the room has been discovered by any player - note
+    // discovery of the room by any player is visible on the 
+    // mini-map 
     discovered: boolean;
+    // True if the room has spike traps in it
     spikes: boolean;
+    // The location of the spike traps relative to the room if any
     spikeLocations: SpikeLocation[];
+    // The item in the room if any
     item?: "silver" | "bronze" | "gold" | "egg" | "treasure" | "speed" | "health";
 }
 
+// Utility to get the opposite direction 
 function reverseDirection(dir: Direction): Direction {
     switch (dir) {
         case Direction.WEST:
@@ -41,10 +60,16 @@ function reverseDirection(dir: Direction): Direction {
     }
 }
 
+// The big function to generate a dungeon by placing rooms
+// relative to existing rooms and checking for collisions
 export function generateDungeon(state: GameState): void {
+    // create a starting room, it's always in the same place but might 
+    // not be the room that players actually start in. It's the start
+    // of the dungeon generation.
     const startRoom: Room = { id: 1, x: 0, y: 0, width: 10, height: 10, connections: {}, doors: {}, depth: 0, discovered: false, spikes: false, spikeLocations: [] };
     state.rooms.push(startRoom);
 
+    // the number of rooms we're hoping to generate
     const targetCount = 50;
     let nextId = 2;
 
@@ -53,9 +78,13 @@ export function generateDungeon(state: GameState): void {
     const areaSize = 40;
     let maxLoops = 1000;
 
+    // while we have more rooms to generate and we haven't
+    // got stuck (maxLoops)
     while (state.rooms.length < targetCount && maxLoops > 0) {
         maxLoops--;
 
+        // pick a room to start from and check what directions are already linked 
+        // (we can only go in any direction once from any given room)
         const fromRooms = state.rooms.filter(r => r !== eggRoom || state.rooms.length === 1).filter(r => Object.values(r.connections).length < 4);
         const fromRoom = fromRooms[Math.floor(Math.random() * fromRooms.length)];
         const possibleDirections = [];
@@ -72,6 +101,8 @@ export function generateDungeon(state: GameState): void {
             possibleDirections.push(Direction.EAST);
         }
 
+        // pick a random valid direction and generate a room 
+        // in the right location
         const direction = possibleDirections[Math.floor(Math.random() * possibleDirections.length)];
         const newRoom: Room = {
             id: nextId++, x: 0, y: 0, width: 6 + (Math.floor(Math.random() * 3) * 2), height: 6 + (Math.floor(Math.random() * 3) * 2),
@@ -94,7 +125,8 @@ export function generateDungeon(state: GameState): void {
             newRoom.y = fromRoom.y + Math.floor(fromRoom.height / 2) - Math.floor(newRoom.height / 2);
         }
 
-        // check for collisions
+        // check for collisions of the new room with existing, if there
+        // are any then skip it and pick a different location
         if (newRoom.x < -areaSize || newRoom.y < -areaSize || newRoom.x + newRoom.width > areaSize || newRoom.y + newRoom.height > areaSize) {
             continue;
         }
@@ -102,23 +134,30 @@ export function generateDungeon(state: GameState): void {
             continue;
         }
 
-        // if its not colliding with another rooms space
+        // if its not colliding with another rooms space then add the
+        // room to the dungeon, set up the connections so we know which 
+        // rooms are linked
         state.rooms.push(newRoom);
         fromRoom.connections[direction] = newRoom.id;
         newRoom.connections[reverseDirection(direction)] = fromRoom.id;
 
+        // if the room we've connected to is the room holding the egg
+        // then place the door
         if (fromRoom === eggRoom) {
             fromRoom.doors[direction] = true;
             newRoom.doors[reverseDirection(direction)] = true;
         }
 
+        // keep track of the deepest room - that is the room furthest
+        // from our start room
         if (newRoom.depth > deepestRoom.depth) {
             deepestRoom = newRoom;
         }
     }
 
 
-    // clear out the depth and regenerate it from the start room
+    // clear out the depth and regenerate it from the deepest room, thats
+    // actually where we'll start the players
     state.rooms.forEach(r => r.depth = 10000);
     fillDepth(state.rooms, deepestRoom, 0);
 
@@ -130,7 +169,10 @@ export function generateDungeon(state: GameState): void {
         }
     });
 
+    // place the egg
     eggRoom.item = "egg";
+
+    // place the other unique items
     const toPlace: ((room: Room) => void)[] = [
         (room: Room) => { room.item = "bronze" },
         (room: Room) => { room.item = "silver" },
@@ -140,6 +182,8 @@ export function generateDungeon(state: GameState): void {
         (room: Room) => { room.item = "treasure" },
     ];
 
+    // try and place the unique items as far apart and from the start
+    // as possible to make it a challenge
     while (targetDepth > 0 && toPlace.length > 0) {
         const bestRooms = state.rooms.filter(r => r !== deepestRoom && r !== eggRoom && r.depth > targetDepth - 6 && !r.item);
         if (bestRooms.length > 0) {
@@ -157,13 +201,15 @@ export function generateDungeon(state: GameState): void {
         }
     }
 
-    for (let i = 0; i < 3; i++) {
+    // place health potions in the world
+    for (let i = 0; i < 4; i++) {
         const possible = state.rooms.filter(r => r !== deepestRoom && !r.item);
         const target = possible[Math.floor(Math.random() * possible.length)];
         target.item = "health";
     }
 
-    for (let i = 0; i < 3; i++) {
+    // place speed potions in the world
+    for (let i = 0; i < 4; i++) {
         const possible = state.rooms.filter(r => r !== deepestRoom && !r.item);
         const target = possible[Math.floor(Math.random() * possible.length)];
         target.item = "speed";
@@ -195,6 +241,8 @@ export function generateDungeon(state: GameState): void {
     state.startRoom = deepestRoom.id;
 }
 
+// Check if one room overlaps another - used to during generation
+// to validate room placement
 function roomIntersects(room1: Room, room2: Room): boolean {
     const r1 = { left: room1.x, right: room1.x + room1.width, top: room1.y, bottom: room1.y + room1.height + 1 };
     const r2 = { left: room2.x, right: room2.x + room2.width, top: room2.y, bottom: room2.y + room2.height + 1 };
@@ -205,6 +253,10 @@ function roomIntersects(room1: Room, room2: Room): boolean {
         r2.bottom < r1.top);
 }
 
+// Quick flood fill to generate the depth
+// of rooms - this lets us know how far 
+// rooms are from the start and hence
+// where to place items
 function fillDepth(rooms: Room[], room: Room, depth: number) {
     if (room.depth <= depth) {
         return;
@@ -229,14 +281,18 @@ function fillDepth(rooms: Room[], room: Room, depth: number) {
     }
 }
 
+// Find all the rooms at the specified pixel location
 export function findAllRoomsAt(state: GameState, x: number, y: number): Room[] {
     return state.rooms.filter(r => inRoomSpace(r, x, y));
 }
 
+// Find any room at the specified pixel location
 export function findRoomAt(state: GameState, x: number, y: number): Room | undefined {
     return state.rooms.find(r => inRoomSpace(r, x, y));
 }
 
+// Check if the location given is close to the centre of the room
+// this is used for picking up items
 export function closeToCenter(room: Room, x: number, y: number) {
     const cx = ((room.x + (room.width / 2)) * 32);
     const cy = ((room.y + (room.height / 2)) * 32);
@@ -246,6 +302,8 @@ export function closeToCenter(room: Room, x: number, y: number) {
     return (dx < 32 && dy < 32);
 }
 
+// Broad check to see if the location given in pixels is in the 
+// area occupied by the specified room
 export function inRoomSpace(room: Room, x: number, y: number) {
     // convert to tile space
     x = Math.floor(x / 32);
@@ -254,15 +312,21 @@ export function inRoomSpace(room: Room, x: number, y: number) {
     return (x >= room.x - 1) && (x < room.x + room.width + 1) && (y >= room.y - 1) && (y < room.y + room.height + 1);
 }
 
+// Check if a specified location given in pixels is blocked for
+// movement purposes. If an entity reaches a location that is blocked
+// its movement will be reversed
 export function blockedLocationInRoom(atStart: boolean, room: Room, x: number, y: number, hasAllKeys: boolean) {
     // convert to tile space
     x = x / 32;
     y = y / 32;
 
+    // if we're in the main part of the room, then we're not blocked
     if (x >= room.x + 0.5 && y >= room.y + 1.1 && x < room.x + room.width - 0.4 && y < room.y + room.height - 0.2) {
         return false;
     }
 
+    // if we're waiting at the start of the game, everything but the main part of the room
+    // is blocked to stop people getting a head start :)
     if (atStart) {
         return true;
     }
@@ -270,6 +334,8 @@ export function blockedLocationInRoom(atStart: boolean, room: Room, x: number, y
     const halfX = room.x + Math.floor(room.width / 2) - 1;
     const halfY = room.y + Math.floor(room.height / 2) - 1;
 
+    // check each of door way locations. We can stand in the middle of the room in 
+    // any doorway assuming theres no door there
     if (room.connections[Direction.NORTH]) {
         const topOffset = !hasAllKeys && room.doors[Direction.NORTH] ? -0.5 : 1;
 
