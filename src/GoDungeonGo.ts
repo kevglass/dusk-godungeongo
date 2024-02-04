@@ -20,6 +20,15 @@ import { Direction, Room, findAllRoomsAt, findRoomAt, inRoomSpace } from "./room
 import { InterpolatorLatency, Players } from "rune-games-sdk";
 import { Sound, loadSound, loopSound, playSound } from "./renderer/sound";
 
+function seededRandom(a: number) {
+    return function() {
+      a |= 0; a = a + 0x9e3779b9 | 0;
+      var t = a ^ a >>> 16; t = Math.imul(t, 0x21f0aaad);
+          t = t ^ t >>> 15; t = Math.imul(t, 0x735a2d97);
+      return ((t = t ^ t >>> 15) >>> 0) / 4294967296;
+    }
+}
+
 const PUFF_TIME = 250;
 const PUFF_COLORS = [
     "rgba(255,255,255,0.5)",
@@ -33,6 +42,19 @@ const SPEED_PUFF_COLORS = [
     "rgba(100,100,200,0.7)",
     "rgba(100,100,180,0.7)"
 ];
+
+const FLOOR_VARIANTS = [64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 65, 66, 80, 81, 82];
+const WALL_VARIANTS = [16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 32, 33, 34, 48, 49, 50];
+
+const FLOOR_MAP: number[] = [];
+const WALL_MAP: number[] = [];
+
+const RNG = seededRandom(12345);
+
+for (let i=0;i<1000;i++) {
+    FLOOR_MAP[i] = FLOOR_VARIANTS[Math.floor(RNG() * FLOOR_VARIANTS.length)];
+    WALL_MAP[i] = WALL_VARIANTS[Math.floor(RNG() * WALL_VARIANTS.length)];
+}
 
 const CHAR_NAMES: Record<EntityType, string> = {
     [EntityType.MONSTER]: "",
@@ -482,13 +504,13 @@ export class GoDungeonGo implements InputEventListener {
         translate(room.x * 32, room.y * 32);
         for (let x = 0; x < room.width; x++) {
             for (let y = 0; y < room.height; y++) {
-                drawTile(this.tiles, x * 32, y * 32, 64);
+                drawTile(this.tiles, x * 32, y * 32, FLOOR_MAP[Math.abs((x * y) % FLOOR_MAP.length)]);
             }
         }
 
         for (let x = 1; x < room.width - 1; x++) {
             drawTile(this.tiles, x * 32, -32, 0);
-            drawTile(this.tiles, x * 32, 0, 16);
+            drawTile(this.tiles, x * 32, 0, WALL_MAP[Math.abs((x * room.y) % WALL_MAP.length)]);
             drawTile(this.tiles, x * 32, (room.height * 32) - 32, 0);
             drawTile(this.tiles, x * 32, (room.height * 32), 16);
         }

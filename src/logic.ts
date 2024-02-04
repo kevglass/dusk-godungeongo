@@ -2,7 +2,7 @@ import type { OnChangeAction, OnChangeEvent, PlayerId, Players, RuneClient } fro
 import { Controls, Entity, EntityType, IDLE, RUN, createEntity, updateEntity } from "./entity";
 import { Room, closeToCenter, findAllRoomsAt, findRoomAt, generateDungeon } from "./room";
 
-const ROUND_TIME_MINS = 2;
+const ROUND_TIME_MINS = 3;
 export const SPIKE_STATES = [0, 0, 0, 0, 0, 0, 1, 2, 3, 2, 1];
 // 2 seconds grace allowance after getting hurt
 export const HURT_GRACE = 2000;
@@ -77,20 +77,29 @@ export function getPlayerCount(state: GameState) {
   return state.entities.filter(e => e.type !== EntityType.MONSTER).length;
 }
 
-function createPlayerEntity(state: GameState, playerId: string, type: EntityType) {
+function createPlayerEntity(state: GameState, playerId: string, type: EntityType): Entity | undefined {
   const startRoom = state.rooms.find(r => r.id === state.startRoom);
 
   if (startRoom) {
     const x = ((startRoom.x + 2) * 32) + (Math.random() * (startRoom.width - 4) * 32);
     const y = ((startRoom.y + 2) * 32) + (Math.random() * (startRoom.height - 4) * 32);
 
-    state.entities.push(createEntity(playerId, x, y, type));
+    const entity = createEntity(playerId, x, y, type);
+
+    state.entities.push(entity);
+
+    return entity;
   }
 }
 
 function respawn(state: GameState, entity: Entity) {
   state.entities.splice(state.entities.indexOf(entity), 1);
-  createPlayerEntity(state, entity.id, entity.type);
+  const newPlayer = createPlayerEntity(state, entity.id, entity.type);
+  if (newPlayer) {
+    newPlayer.bronzeKey = entity.bronzeKey;
+    newPlayer.goldKey = entity.goldKey;
+    newPlayer.silverKey = entity.silverKey;
+  }
 }
 
 function startGame(state: GameState) {
@@ -244,43 +253,6 @@ Rune.initLogic({
         updateEntity(Rune.gameTime(), context.game, entity, 0.25);
         const room = findRoomAt(context.game, entity.x, entity.y);
 
-        if (entity.type !== EntityType.MONSTER) {
-          if (Rune.gameTime() - entity.hurtAt > HURT_GRACE) {
-            const touchingMonster = context.game.entities.find(e => e.type === EntityType.MONSTER && Math.abs(e.x - entity.x) < 16 && Math.abs(e.y - entity.y) < 16);
-            if (touchingMonster) {
-              entity.health--;
-              if (entity.health <= 0) {
-                context.game.events.push({ type: GameEventType.DEATH, who: entity.id });
-                respawn(context.game, entity);
-                continue;
-              } else {
-                entity.hurtAt = Rune.gameTime();
-                context.game.events.push({ type: GameEventType.HURT, who: entity.id });
-              }
-            }
-
-            if (room && room.spikes) {
-              const tileX = Math.floor((entity.x - (room.x * 32)) / 32);
-              const tileY = Math.floor((entity.y - (room.y * 32)) / 32);
-              const spikeAtLocation = room.spikeLocations.find(l => l.x === tileX && l.y === tileY);
-              if (spikeAtLocation) {
-                // only get spiked on full up
-                if (getSpikeState(spikeAtLocation.x + room.x, spikeAtLocation.y + room.y, Rune.gameTime()) === 3) {
-                  entity.health--;
-                  if (entity.health <= 0) {
-                    context.game.events.push({ type: GameEventType.DEATH, who: entity.id });
-                    respawn(context.game, entity);
-                    continue;
-                  } else {
-                    entity.hurtAt = Rune.gameTime();
-                    context.game.events.push({ type: GameEventType.HURT, who: entity.id });
-                  }
-                }
-              }
-            }
-          }
-        }
-
         if (room && entity.type !== EntityType.MONSTER) {
           room.discovered = true;
           if (room.item) {
@@ -327,6 +299,47 @@ Rune.initLogic({
                 context.game.gameOver = true;
                 context.game.gameOverTime = Rune.gameTime();
                 context.game.events.push({ type: GameEventType.WIN });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    for (const entity of context.game.entities) {
+      const room = findRoomAt(context.game, entity.x, entity.y);
+
+      if (entity.type !== EntityType.MONSTER) {
+        if (Rune.gameTime() - entity.hurtAt > HURT_GRACE) {
+          const touchingMonster = context.game.entities.find(e => e.type === EntityType.MONSTER && Math.abs(e.x - entity.x) < 16 && Math.abs(e.y - entity.y) < 16);
+          if (touchingMonster) {
+            entity.health--;
+            if (entity.health <= 0) {
+              context.game.events.push({ type: GameEventType.DEATH, who: entity.id });
+              respawn(context.game, entity);
+              continue;
+            } else {
+              entity.hurtAt = Rune.gameTime();
+              context.game.events.push({ type: GameEventType.HURT, who: entity.id });
+            }
+          }
+
+          if (room && room.spikes) {
+            const tileX = Math.floor((entity.x - (room.x * 32)) / 32);
+            const tileY = Math.floor((entity.y - (room.y * 32)) / 32);
+            const spikeAtLocation = room.spikeLocations.find(l => l.x === tileX && l.y === tileY);
+            if (spikeAtLocation) {
+              // only get spiked on full up
+              if (getSpikeState(spikeAtLocation.x + room.x, spikeAtLocation.y + room.y, Rune.gameTime()) === 3) {
+                entity.health--;
+                if (entity.health <= 0) {
+                  context.game.events.push({ type: GameEventType.DEATH, who: entity.id });
+                  respawn(context.game, entity);
+                  continue;
+                } else {
+                  entity.hurtAt = Rune.gameTime();
+                  context.game.events.push({ type: GameEventType.HURT, who: entity.id });
+                }
               }
             }
           }
