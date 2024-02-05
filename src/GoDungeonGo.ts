@@ -17,7 +17,7 @@ import sfxSpeedUp from "./assets/speedup.mp3";
 import { Controls, Entity, EntityType, RUN } from "./entity";
 import { intersects } from "./renderer/util";
 import { Direction, Room, findAllRoomsAt, findRoomAt } from "./room";
-import { Interpolator, Players } from "rune-games-sdk";
+import { Interpolator, InterpolatorLatency, Players } from "rune-games-sdk";
 import { Sound, loadSound, playSound } from "./renderer/sound";
 import nipplejs, { JoystickManager } from 'nipplejs';
 
@@ -111,36 +111,18 @@ interface Puff {
     speedCol: string;
 }
 
-export class LocalInterpolator {
-    current: number[] = [];
-    last: number[] = [];
-    time = 0;
-    timeBetweenUpdates = 0;
-    
-    update(params: {
-        game: number[];
-        futureGame: number[];
-    }) {
-        this.current = params.game;
-    }
-
-    getPosition() {
-        return this.current;
-    }
-}
-
 // Renderer representation of an entity. Using a Rune interpolator 
 // to smooth out movement
 export class EntitySprite {
     // the animation frame
     frame = 0;
     // the interpolator used to smooth movement
-    interpolator: Interpolator<number[]>
+    interpolator: InterpolatorLatency<number[]>
     // the last few locations where the puffs of smoke are generated
     lastFrames: Puff[] = [];
 
-    constructor(local: boolean) {
-        this.interpolator = local ? new LocalInterpolator() : Rune.interpolatorLatency({ maxSpeed: 15 })
+    constructor() {
+        this.interpolator = Rune.interpolatorLatency({ maxSpeed: 15 })
     }
 
     update(x: number, y: number, controls: Controls) {
@@ -354,6 +336,10 @@ export class GoDungeonGo implements InputEventListener {
 
     // notification of a new game state from the Rune SDK
     gameUpdate(update: GameUpdate) {
+        if (update.event?.name && (update.event.name !== "update" && update.event.name !== "stateSync")) {
+            return;
+        }
+
         // process any events that have taken place
         for (const event of update.game.events) {
             // when the game restart we need to clear up our 
@@ -487,7 +473,7 @@ export class GoDungeonGo implements InputEventListener {
         for (const entity of this.game.entities) {
             let sprite = this.entitySprites[entity.id];
             if (!sprite) {
-                sprite = this.entitySprites[entity.id] = new EntitySprite(entity.id === this.playerId);
+                sprite = this.entitySprites[entity.id] = new EntitySprite();
             }
 
             const futureEntity = update.futureGame?.entities.find(e => e.id === entity.id);
@@ -498,13 +484,13 @@ export class GoDungeonGo implements InputEventListener {
                     futureGame: [futureEntity.x, futureEntity.y]
                 });
 
-                // // if its the local entity then we just want to use the new position
-                // // it'll always ben up to date
-                // if (entity.id === this.playerId) {
-                //     sprite.interpolator.jump(
-                //         [futureEntity.x, futureEntity.y]
-                //     );
-                // }
+                // if its the local entity then we just want to use the new position
+                // it'll always ben up to date
+                if (entity.id === this.playerId) {
+                    sprite.interpolator.jump(
+                        [futureEntity.x, futureEntity.y]
+                    );
+                }
             }
         }
 
@@ -522,6 +508,12 @@ export class GoDungeonGo implements InputEventListener {
                 local = this.localRooms[room.id] = new LocalRoom();
             }
         }
+
+        // attempt to update controls if they're not synced with
+        // the data model
+        setTimeout(() => {
+            this.updateControls();
+        }, 10);
     }
 
     updateControls(): void {
@@ -836,10 +828,6 @@ export class GoDungeonGo implements InputEventListener {
 
         if (this.game) {
             if (this.joined) {
-                // attempt to update controls if they're not synced with
-                // the data model
-                this.updateControls();
-
                 // simple player camera tracking
                 const myEntity = this.game.entities.find(e => e.id === this.playerId)
                 if (myEntity) {
