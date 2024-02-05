@@ -17,7 +17,7 @@ import sfxSpeedUp from "./assets/speedup.mp3";
 import { Controls, Entity, EntityType, RUN } from "./entity";
 import { intersects } from "./renderer/util";
 import { Direction, Room, findAllRoomsAt, findRoomAt } from "./room";
-import { Interpolator, InterpolatorLatency, Players } from "rune-games-sdk";
+import { Interpolator, Players } from "rune-games-sdk";
 import { Sound, loadSound, playSound } from "./renderer/sound";
 import nipplejs, { JoystickManager } from 'nipplejs';
 
@@ -233,15 +233,6 @@ export class GoDungeonGo implements InputEventListener {
     // The y coordinate of the view/camera location
     viewY = 0;
 
-    // True if the player is trying ot move left
-    left = false;
-    // True if the player is trying ot move right
-    right = false;
-    // True if the player is trying ot move down
-    down = false;
-    // True if the player is trying ot move up
-    up = false;
-
     // A collection of renderer representations of the entities in the game, keyed on the entity ID
     entitySprites: Record<string, EntitySprite> = {};
     // A collection of renderer representations of the rooms in the game, keyed on Room ID
@@ -335,14 +326,12 @@ export class GoDungeonGo implements InputEventListener {
                 this.controls.up = false;
                 this.controls.down = false;
             }
-            this.updateControls();
         });
         this.joystick.on("end", () => {
             this.controls.left = false;
             this.controls.right = false;
             this.controls.up = false;
             this.controls.down = false;
-            this.updateControls();
         });
     }
 
@@ -599,20 +588,16 @@ export class GoDungeonGo implements InputEventListener {
             const myEntity = this.game.entities.find(e => e.id === this.playerId);
             if (myEntity) {
                 if (key === "ArrowLeft") {
-                    this.left = true;
+                    this.controls.left = true;
                 }
                 if (key === "ArrowRight") {
-                    this.right = true;
+                    this.controls.right = true;
                 }
                 if (key === "ArrowUp") {
-                    this.up = true;
+                    this.controls.up = true;
                 }
                 if (key === "ArrowDown") {
-                    this.down = true;
-                }
-                if (((myEntity.controls.left !== this.left) || (myEntity.controls.right !== this.right) ||
-                    (myEntity.controls.up !== this.up) || (myEntity.controls.down !== this.down))) {
-                    Rune.actions.applyControls({ left: this.left, right: this.right, up: this.up, down: this.down });
+                    this.controls.down = true;
                 }
                 if (key === " ") {
                     Rune.actions.useItem();
@@ -628,20 +613,16 @@ export class GoDungeonGo implements InputEventListener {
             const myEntity = this.game.entities.find(e => e.id === this.playerId);
             if (myEntity) {
                 if (key === "ArrowLeft") {
-                    this.left = false;
+                    this.controls.left = false;
                 }
                 if (key === "ArrowRight") {
-                    this.right = false;
+                    this.controls.right = false;
                 }
                 if (key === "ArrowUp") {
-                    this.up = false;
+                    this.controls.up = false;
                 }
                 if (key === "ArrowDown") {
-                    this.down = false;
-                }
-                if (((myEntity.controls.left !== this.left) || (myEntity.controls.right !== this.right) ||
-                    (myEntity.controls.up !== this.up) || (myEntity.controls.down !== this.down))) {
-                    Rune.actions.applyControls({ left: this.left, right: this.right, up: this.up, down: this.down });
+                    this.controls.down = false;
                 }
             }
         }
@@ -856,6 +837,10 @@ export class GoDungeonGo implements InputEventListener {
 
         if (this.game) {
             if (this.joined) {
+                // attempt to update controls if they're not synced with
+                // the data model
+                this.updateControls();
+
                 // simple player camera tracking
                 const myEntity = this.game.entities.find(e => e.id === this.playerId)
                 if (myEntity) {
