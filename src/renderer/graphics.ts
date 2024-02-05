@@ -36,6 +36,10 @@ document.addEventListener('contextmenu', event => {
     event.preventDefault();
 });
 
+canvas.addEventListener('contextmenu', event => {
+    event.preventDefault();
+});
+
 canvas.addEventListener("touchstart", (event) => {
     resumeAudioOnInput();
 
@@ -109,7 +113,7 @@ export function screenHeight(): number {
 export function loadImage(url: string): HTMLImageElement {
     const image = new Image();
     image.src = url
-    
+
     return image;
 }
 

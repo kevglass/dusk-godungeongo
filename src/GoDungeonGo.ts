@@ -17,7 +17,7 @@ import sfxSpeedUp from "./assets/speedup.mp3";
 import { Controls, Entity, EntityType, RUN } from "./entity";
 import { intersects } from "./renderer/util";
 import { Direction, Room, findAllRoomsAt, findRoomAt } from "./room";
-import { InterpolatorLatency, Players } from "rune-games-sdk";
+import { Interpolator, InterpolatorLatency, Players } from "rune-games-sdk";
 import { Sound, loadSound, playSound } from "./renderer/sound";
 import nipplejs, { JoystickManager } from 'nipplejs';
 
@@ -111,18 +111,36 @@ interface Puff {
     speedCol: string;
 }
 
+export class LocalInterpolator {
+    current: number[] = [];
+    last: number[] = [];
+    time = 0;
+    timeBetweenUpdates = 0;
+    
+    update(params: {
+        game: number[];
+        futureGame: number[];
+    }) {
+        this.current = params.game;
+    }
+
+    getPosition() {
+        return this.current;
+    }
+}
+
 // Renderer representation of an entity. Using a Rune interpolator 
 // to smooth out movement
 export class EntitySprite {
     // the animation frame
     frame = 0;
     // the interpolator used to smooth movement
-    interpolator: InterpolatorLatency<number[]>
+    interpolator: Interpolator<number[]>
     // the last few locations where the puffs of smoke are generated
     lastFrames: Puff[] = [];
 
-    constructor() {
-        this.interpolator = Rune.interpolatorLatency({ maxSpeed: 15 })
+    constructor(local: boolean) {
+        this.interpolator = local ? new LocalInterpolator() : Rune.interpolatorLatency({ maxSpeed: 15 })
     }
 
     update(x: number, y: number, controls: Controls) {
@@ -319,6 +337,13 @@ export class GoDungeonGo implements InputEventListener {
             }
             this.updateControls();
         });
+        this.joystick.on("end", () => {
+            this.controls.left = false;
+            this.controls.right = false;
+            this.controls.up = false;
+            this.controls.down = false;
+            this.updateControls();
+        });
     }
 
     // start the game
@@ -474,7 +499,7 @@ export class GoDungeonGo implements InputEventListener {
         for (const entity of this.game.entities) {
             let sprite = this.entitySprites[entity.id];
             if (!sprite) {
-                sprite = this.entitySprites[entity.id] = new EntitySprite();
+                sprite = this.entitySprites[entity.id] = new EntitySprite(entity.id === this.playerId);
             }
 
             const futureEntity = update.futureGame?.entities.find(e => e.id === entity.id);
@@ -485,13 +510,13 @@ export class GoDungeonGo implements InputEventListener {
                     futureGame: [futureEntity.x, futureEntity.y]
                 });
 
-                // if its the local entity then we just want to use the new position
-                // it'll always ben up to date
-                if (entity.id === this.playerId) {
-                    sprite.interpolator.jump(
-                        [futureEntity.x, futureEntity.y]
-                    );
-                }
+                // // if its the local entity then we just want to use the new position
+                // // it'll always ben up to date
+                // if (entity.id === this.playerId) {
+                //     sprite.interpolator.jump(
+                //         [futureEntity.x, futureEntity.y]
+                //     );
+                // }
             }
         }
 
@@ -888,7 +913,8 @@ export class GoDungeonGo implements InputEventListener {
                             // use the interpolator to get the position
                             // to keep movement of remote entities smooth
                             const sprite = this.entitySprites[entity.id];
-                            sprite.update(sprite.interpolator.getPosition()[0], sprite.interpolator.getPosition()[1], entity.controls);
+                            const pos = sprite.interpolator.getPosition();
+                            sprite.update(pos[0], pos[1], entity.controls);
 
                             // move the animation forward
                             sprite.frame += 0.1;
@@ -913,7 +939,7 @@ export class GoDungeonGo implements InputEventListener {
                             }
 
                             // draw the actual character 
-                            translate(sprite.interpolator.getPosition()[0] - 16, sprite.interpolator.getPosition()[1] - 32);
+                            translate(pos[0] - 16, pos[1] - 32);
 
                             // render the player's name
                             if (this.players && this.players[entity.id]) {
