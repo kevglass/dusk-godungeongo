@@ -201,42 +201,26 @@ export function generateDungeon(state: GameState): void {
         }
     }
 
-    // place health potions in the world
-    for (let i = 0; i < 4; i++) {
-        const possible = state.rooms.filter(r => r !== deepestRoom && !r.item);
-        const target = possible[Math.floor(Math.random() * possible.length)];
-        target.item = "health";
-    }
-
-    // place speed potions in the world
-    for (let i = 0; i < 4; i++) {
-        const possible = state.rooms.filter(r => r !== deepestRoom && !r.item);
-        const target = possible[Math.floor(Math.random() * possible.length)];
-        target.item = "speed";
-    }
-
-    // place spike rooms
-    for (let i = 0; i < 7; i++) {
-        const possible = state.rooms.filter(r => r !== deepestRoom && !r.item && !r.spikes);
-        if (possible.length > 0) {
-            const target = possible[Math.floor(Math.random() * possible.length)];
+    let monsterIndex = 1;
+    state.rooms.filter(r => r !== deepestRoom && !r.item).forEach(target => {
+        if (Math.random() > 0.8) {
+            // add a monster
+            const monster = createEntity("monster" + (monsterIndex++), Math.floor(target.x + (target.width / 2)) * 32, Math.floor(target.y + (target.height / 2)) * 32, EntityType.MONSTER);
+            monster.speed = 2;
+            state.entities.push(monster);
+        } else if (Math.random() > 0.5) {
+            // add spike traps
             target.spikes = true;
             for (let n = 0; n < 5; n++) {
                 target.spikeLocations.push({ x: 2 + Math.floor(Math.random() * (target.width - 4)), y: 2 + Math.floor(Math.random() * (target.height - 4)) });
-            }
-        }
-    }
-    // place monster room
-    for (let i = 0; i < 7; i++) {
-        const possible = state.rooms.filter(r => r !== deepestRoom && !r.item && !r.spikes);
-        if (possible.length > 0) {
-            const target = possible[Math.floor(Math.random() * possible.length)];
-            const monster = createEntity("monster" + i, Math.floor(target.x + (target.width / 2)) * 32, Math.floor(target.y + (target.height / 2)) * 32, EntityType.MONSTER);
-            monster.speed = 2;
-            state.entities.push(monster);
-        }
-    }
+            }   
+        } else if (Math.random() > 0.45) {
+            target.item = "health";
+        } else if (Math.random() > 0.4) {
+            target.item = "speed";
 
+        }
+    });
 
     state.startRoom = deepestRoom.id;
 }
