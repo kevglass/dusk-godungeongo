@@ -305,7 +305,6 @@ export class GoDungeonGo implements InputEventListener {
         // select a random type, might help players get familiar with possible characters
         this.selectedType = this.typeOptions[Math.floor(Math.random() * this.typeOptions.length)];
 
-        console.log(document.getElementById("joystick"));
         this.joystick = nipplejs.create({
             mode: "static",
             zone: document.getElementById("joystick") ?? document.body,
