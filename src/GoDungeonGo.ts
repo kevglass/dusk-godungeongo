@@ -336,10 +336,6 @@ export class GoDungeonGo implements InputEventListener {
 
     // notification of a new game state from the Rune SDK
     gameUpdate(update: GameUpdate) {
-        if (update.event?.name && (update.event.name !== "update" && update.event.name !== "stateSync")) {
-            return;
-        }
-
         // process any events that have taken place
         for (const event of update.game.events) {
             // when the game restart we need to clear up our 
@@ -461,35 +457,42 @@ export class GoDungeonGo implements InputEventListener {
         this.playerId = update.yourPlayerId;
         this.players = update.players;
 
-        // load any avatar images we haven't already got
-        for (const playerId in update.players) {
-            if (!this.avatarImages[playerId]) {
-                this.avatarImages[playerId] = loadImage(update.players[playerId].avatarUrl);
+        for (const entity of this.game.entities) {
+            if (!this.entitySprites[entity.id]) {
+                this.entitySprites[entity.id] = new EntitySprite();
+                this.entitySprites[entity.id].interpolator.update({
+                    game: [entity.x, entity.y],
+                    futureGame: [entity.x, entity.y]
+                });
             }
         }
-
-        // cause the entities in the game to update 
-        // to match the current game state.
-        for (const entity of this.game.entities) {
-            let sprite = this.entitySprites[entity.id];
-            if (!sprite) {
-                sprite = this.entitySprites[entity.id] = new EntitySprite();
+        if (update.event?.name === "update") {
+            // load any avatar images we haven't already got
+            for (const playerId in update.players) {
+                if (!this.avatarImages[playerId]) {
+                    this.avatarImages[playerId] = loadImage(update.players[playerId].avatarUrl);
+                }
             }
 
-            const futureEntity = update.futureGame?.entities.find(e => e.id === entity.id);
+            // cause the entities in the game to update 
+            // to match the current game state.
+            for (const entity of this.game.entities) {
+                const sprite = this.entitySprites[entity.id];
+                const futureEntity = update.futureGame?.entities.find(e => e.id === entity.id);
 
-            if (futureEntity) {
-                sprite.interpolator.update({
-                    game: [entity.x, entity.y],
-                    futureGame: [futureEntity.x, futureEntity.y]
-                });
+                if (futureEntity) {
+                    sprite.interpolator.update({
+                        game: [entity.x, entity.y],
+                        futureGame: [futureEntity.x, futureEntity.y]
+                    });
 
-                // if its the local entity then we just want to use the new position
-                // it'll always ben up to date
-                if (entity.id === this.playerId) {
-                    sprite.interpolator.jump(
-                        [futureEntity.x, futureEntity.y]
-                    );
+                    // if its the local entity then we just want to use the new position
+                    // it'll always ben up to date
+                    if (entity.id === this.playerId) {
+                        sprite.interpolator.jump(
+                            [futureEntity.x, futureEntity.y]
+                        );
+                    }
                 }
             }
         }
