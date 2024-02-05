@@ -3,8 +3,6 @@ import { InputEventListener, TileSet, drawImage, drawText, drawTile, fillCircle,
 import gfxTilesUrl from "./assets/tileset.png";
 import gfxTilesRedUrl from "./assets/tilesetred.png";
 import gfxTiles2xUrl from "./assets/tileset2x.png";
-import gfxDpad from "./assets/dpad.png";
-import gfxButton from "./assets/button.png";
 import gfxLogo from "./assets/logo.png";
 import sfxCountdown from "./assets/countdown.mp3";
 import sfxCollect from "./assets/collect.mp3";
@@ -21,6 +19,8 @@ import { intersects } from "./renderer/util";
 import { Direction, Room, findAllRoomsAt, findRoomAt } from "./room";
 import { InterpolatorLatency, Players } from "rune-games-sdk";
 import { Sound, loadSound, playSound } from "./renderer/sound";
+import nipplejs, { JoystickManager } from 'nipplejs';
+
 
 // a predictable random used to generate the random
 // tiles that build up the world. Same seed
@@ -196,10 +196,6 @@ export class GoDungeonGo implements InputEventListener {
     // A red tinted version of the tiles used when someone gets hurt. Again saves run
     // time tinting.
     tilesRed: TileSet;
-    // The directional pad graphic
-    dpad: TileSet;
-    // The button graphic
-    button: TileSet;
 
     // The latest game state received 
     game?: GameState;
@@ -218,9 +214,6 @@ export class GoDungeonGo implements InputEventListener {
     viewX = 0;
     // The y coordinate of the view/camera location
     viewY = 0;
-
-    // The ID of the touch that is active on the dpad at the moment
-    touchInDpad = -1;
 
     // True if the player is trying ot move left
     left = false;
@@ -243,10 +236,6 @@ export class GoDungeonGo implements InputEventListener {
     // The game logo 
     logo: HTMLImageElement;
 
-    // the current centre of the dpad. When the player touches the screen the dpad centre is set.
-    dpadCenterY = -1;
-    // the current centre of the dpad. When the player touches the screen the dpad centre is set.
-    dpadCenterX = -1;
     // the character the player has selected
     selectedType: EntityType = EntityType.PINK_KNIGHT;
     // the list of potential characters
@@ -277,13 +266,22 @@ export class GoDungeonGo implements InputEventListener {
     // sound for when a player drinks a speed potion
     sfxSpeedUp: Sound;
 
+    // joystick
+    joystick?: JoystickManager;
+
+    // local controls
+    controls: Controls = {
+        left: false,
+        right: false,
+        up: false,
+        down: false
+    };
+
     constructor() {
         // load all the resources
         this.tiles = loadTileSet(gfxTilesUrl, 32, 32);
         this.tilesRed = loadTileSet(gfxTilesRedUrl, 32, 32);
         this.tiles2x = loadTileSet(gfxTiles2xUrl, 64, 64);
-        this.dpad = loadTileSet(gfxDpad, 80, 80);
-        this.button = loadTileSet(gfxButton, 80, 80);
         this.logo = loadImage(gfxLogo);
         this.sfxKey = loadSound(sfxKey);
         this.sfxCollect = loadSound(sfxCollect);
@@ -297,6 +295,30 @@ export class GoDungeonGo implements InputEventListener {
 
         // select a random type, might help players get familiar with possible characters
         this.selectedType = this.typeOptions[Math.floor(Math.random() * this.typeOptions.length)];
+
+        console.log(document.getElementById("joystick"));
+        this.joystick = nipplejs.create({
+            mode: "static",
+            zone: document.getElementById("joystick") ?? document.body,
+            position: { left: '40%', bottom: '35%' }
+        });
+        this.joystick.on("move", (event, joystick) => {
+            if (Math.abs(joystick.vector.x) > 0.1) {
+                this.controls.left = joystick.direction.x === "left";
+                this.controls.right = joystick.direction.x === "right";
+            } else {
+                this.controls.left = false;
+                this.controls.right = false;
+            }
+            if (Math.abs(joystick.vector.y) > 0.1) {
+                this.controls.up = joystick.direction.y === "up";
+                this.controls.down = joystick.direction.y === "down";
+            } else {
+                this.controls.up = false;
+                this.controls.down = false;
+            }
+            this.updateControls();
+        });
     }
 
     // start the game
@@ -489,59 +511,21 @@ export class GoDungeonGo implements InputEventListener {
         }
     }
 
-    // process a move/drag over the DPAD and convert it 
-    // to a set of controls. If the controls have
-    // changed apply the action
-    processDPad(x: number, y: number) {
+    updateControls(): void {
         if (this.game) {
-            const dx = x - this.dpadCenterX;
-            const dy = y - this.dpadCenterY;
-
-            let left = false;
-            let right = false;
-            let down = false;
-            let up = false;
-
-            if (Math.abs(dx) > this.controlSize / 6) {
-                // dx is big enough to be relevant
-                left = dx < 0;
-                right = dx > 0;
-            } else {
-                left = false;
-                right = false;
-            }
-
-            if (Math.abs(dy) > this.controlSize / 6) {
-                // dx is big enough to be relevant
-                up = dy < 0;
-                down = dy > 0;
-            } else {
-                up = false;
-                down = false;
-            }
-
             const myEntity = this.game.entities.find(e => e.id === this.playerId);
             if (myEntity &&
-                ((myEntity.controls.left !== left) || (myEntity.controls.right !== right) ||
-                    (myEntity.controls.up !== up) || (myEntity.controls.down !== down))) {
-                Rune.actions.applyControls({ left, right, up, down });
+                ((myEntity.controls.left !== this.controls.left) || (myEntity.controls.right !== this.controls.right) ||
+                    (myEntity.controls.up !== this.controls.up) || (myEntity.controls.down !== this.controls.down))) {
+                Rune.actions.applyControls({ ...this.controls });
             }
         }
     }
 
     // Notification of a mouse press or touch start
-    mouseDown(x: number, y: number, index: number): void {
+    mouseDown(x: number, y: number): void {
         if (this.joined) {
             const controlsY = screenHeight() - this.controlSize - this.controlVerticalPadding;
-
-            if (x < screenWidth() / 2 && y > screenHeight() / 2) {
-                // pressed in the DPAD, if we don't already have a finger down there
-                // then we do now
-                this.touchInDpad = index;
-                this.dpadCenterX = x;
-                this.dpadCenterY = y;
-                this.processDPad(x, y);
-            }
 
             if (intersects(x, y, screenWidth() - this.controlSize - this.controlHorizontalPadding, controlsY, this.controlSize, this.controlSize)) {
                 Rune.actions.useItem();
@@ -550,18 +534,12 @@ export class GoDungeonGo implements InputEventListener {
     }
 
     // Notification of a mouse drag or a touch move
-    mouseDrag(x: number, y: number, index: number): void {
-        if (this.joined) {
-            // if its the touch thats currently controlling the dpad
-            // then process the input
-            if (index === this.touchInDpad) {
-                this.processDPad(x, y);
-            }
-        }
+    mouseDrag(): void {
+        // nothing to see here
     }
 
     // Notification of a mouse up or a touch end
-    mouseUp(x: number, y: number, index: number): void {
+    mouseUp(x: number, y: number): void {
         // do nothing
         if (!this.joined) {
             // do the buttons on the front page for character
@@ -585,19 +563,6 @@ export class GoDungeonGo implements InputEventListener {
             } else if (y > 350) {
                 Rune.actions.join({ type: this.selectedType });
                 this.joined = true;
-            }
-        } else {
-            // if the touch/mouse ended for the ID currently
-            // controlling the DPAD then clear all the controls (they
-            // lifted their thumb off)
-            if (index === this.touchInDpad) {
-                this.touchInDpad = -1;
-                if (this.game) {
-                    const myEntity = this.game.entities.find(e => e.id === this.playerId)
-                    if (myEntity) {
-                        Rune.actions.applyControls({ left: false, right: false, up: false, down: false });
-                    }
-                }
             }
         }
     }
@@ -832,7 +797,7 @@ export class GoDungeonGo implements InputEventListener {
             drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16) - 32, 22);
             drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 38);
         }
-        
+
         // if there are spikes render them
         if (room.spikes) {
             for (const location of room.spikeLocations) {
@@ -858,16 +823,11 @@ export class GoDungeonGo implements InputEventListener {
     loop(): void {
         // calculate the controls size based on the screen size
         this.controlSize = screenWidth() / 5;
-        this.controlHorizontalPadding = this.controlSize / 2
-        this.controlVerticalPadding = this.controlSize * 0.7;
+        this.controlHorizontalPadding = this.controlSize / 1.5
+        this.controlVerticalPadding = this.controlSize;
 
         // let the graphics do whatever it wants to do
         updateGraphics();
-
-        if (this.dpadCenterX == -1) {
-            this.dpadCenterX = this.controlHorizontalPadding + (this.controlSize / 2);
-            this.dpadCenterY = screenHeight() - (this.controlSize / 2) - this.controlVerticalPadding;
-        }
 
         if (this.game) {
             if (this.joined) {
@@ -1045,27 +1005,6 @@ export class GoDungeonGo implements InputEventListener {
                     popState();
                 }
 
-                // render game controls
-                pushState();
-                setAlpha(0.8);
-                drawTile(this.dpad, this.dpadCenterX - (this.controlSize / 2), this.dpadCenterY - (this.controlSize / 2), 0, this.controlSize, this.controlSize);
-                translate(0, screenHeight() - this.controlSize - this.controlVerticalPadding);
-
-                drawTile(this.button, screenWidth() - this.controlSize - this.controlHorizontalPadding, 0, 0, this.controlSize, this.controlSize);
-                if (this.game) {
-                    const myEntity = this.game.entities.find(e => e.id === this.playerId);
-                    if (myEntity) {
-                        const offset = (this.controlSize - 32) / 2;
-                        if (myEntity.item === "speed") {
-                            drawTile(this.tiles, screenWidth() - this.controlSize - this.controlHorizontalPadding + offset, offset, 28);
-                        }
-                        if (myEntity.item === "health") {
-                            drawTile(this.tiles, screenWidth() - this.controlSize - this.controlHorizontalPadding + offset, offset, 27);
-                        }
-                    }
-                }
-                popState();
-
                 // render score board when at start
                 if (this.game && this.players && (this.game.atStart || this.game.gameOver)) {
                     let item = 0;
@@ -1186,6 +1125,27 @@ export class GoDungeonGo implements InputEventListener {
                 drawText(Math.floor((screenWidth() - stringWidth(name, 20)) / 2), 230, name, 20, "white");
             }
         }
+
+        // render game controls
+        pushState();
+        setAlpha(0.2);
+        translate(0, screenHeight() - this.controlSize - this.controlVerticalPadding);
+
+        fillCircle(screenWidth() - (this.controlSize / 2) - this.controlHorizontalPadding, +this.controlSize / 2, this.controlSize / 2, "white");
+        setAlpha(0.8);
+        if (this.game) {
+            const myEntity = this.game.entities.find(e => e.id === this.playerId);
+            if (myEntity) {
+                const offset = (this.controlSize - 32) / 2;
+                if (myEntity.item === "speed") {
+                    drawTile(this.tiles, screenWidth() - this.controlSize - this.controlHorizontalPadding + offset, offset, 28);
+                }
+                if (myEntity.item === "health") {
+                    drawTile(this.tiles, screenWidth() - this.controlSize - this.controlHorizontalPadding + offset, offset, 27);
+                }
+            }
+        }
+        popState();
 
         // continue the loop on the next screen update
         requestAnimationFrame(() => { this.loop() });
