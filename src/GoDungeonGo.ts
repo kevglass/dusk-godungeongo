@@ -485,14 +485,6 @@ export class GoDungeonGo implements InputEventListener {
                         game: [entity.x, entity.y],
                         futureGame: [futureEntity.x, futureEntity.y]
                     });
-
-                    // if its the local entity then we just want to use the new position
-                    // it'll always ben up to date
-                    if (entity.id === this.playerId) {
-                        sprite.interpolator.jump(
-                            [futureEntity.x, futureEntity.y]
-                        );
-                    }
                 }
             }
         }
@@ -888,7 +880,7 @@ export class GoDungeonGo implements InputEventListener {
                             // use the interpolator to get the position
                             // to keep movement of remote entities smooth
                             const sprite = this.entitySprites[entity.id];
-                            const pos = sprite.interpolator.getPosition();
+                            const pos = entity.id === this.playerId ? [entity.x, entity.y] : sprite.interpolator.getPosition();
                             sprite.update(pos[0], pos[1], entity.controls);
 
                             // move the animation forward
