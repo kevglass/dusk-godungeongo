@@ -826,8 +826,10 @@ export class GoDungeonGo implements InputEventListener {
                 // simple player camera tracking
                 const myEntity = this.game.entities.find(e => e.id === this.playerId)
                 if (myEntity) {
-                    this.viewX = myEntity.x - (screenWidth() / 2);
-                    this.viewY = myEntity.y - (screenHeight() * 0.4);
+                    const sprite = this.entitySprites[myEntity.id];
+                    const pos = sprite.interpolator.getPosition();
+                    this.viewX = pos[0] - (screenWidth() / 2);
+                    this.viewY = pos[1] - (screenHeight() * 0.4);
 
                     for (const room of findAllRoomsAt(this.game, myEntity.x, myEntity.y)) {
                         const localRoom = this.localRooms[room.id];
@@ -880,7 +882,7 @@ export class GoDungeonGo implements InputEventListener {
                             // use the interpolator to get the position
                             // to keep movement of remote entities smooth
                             const sprite = this.entitySprites[entity.id];
-                            const pos = entity.id === this.playerId ? [entity.x, entity.y] : sprite.interpolator.getPosition();
+                            const pos = sprite.interpolator.getPosition();
                             sprite.update(pos[0], pos[1], entity.controls);
 
                             // move the animation forward
