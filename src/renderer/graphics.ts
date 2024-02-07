@@ -48,6 +48,7 @@ canvas.addEventListener("touchstart", (event) => {
     }
 
     event.stopPropagation();
+    event.preventDefault();
 });
 
 window.addEventListener("keydown", (event) => {
@@ -66,6 +67,7 @@ canvas.addEventListener("touchend", (event) => {
     }
 
     event.stopPropagation();
+    event.preventDefault();
 });
 
 canvas.addEventListener("touchmove", (event) => {
@@ -76,6 +78,7 @@ canvas.addEventListener("touchmove", (event) => {
     }
 
     event.stopPropagation();
+    event.preventDefault();
 });
 
 canvas.addEventListener("mousedown", (event) => {
@@ -84,6 +87,7 @@ canvas.addEventListener("mousedown", (event) => {
     mouseDown = true;
 
     event.stopPropagation();
+    event.preventDefault();
 });
 
 canvas.addEventListener("mousemove", (event) => {
@@ -92,6 +96,7 @@ canvas.addEventListener("mousemove", (event) => {
         eventListener?.mouseDrag(event.x, event.y, event.button);
 
         event.stopPropagation();
+        event.preventDefault();
     }
 });
 
