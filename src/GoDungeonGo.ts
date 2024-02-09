@@ -17,7 +17,7 @@ import sfxSpeedUp from "./assets/speedup.mp3";
 import { Controls, Entity, EntityType, RUN } from "./entity";
 import { intersects } from "./renderer/util";
 import { Direction, Room, findAllRoomsAt, findRoomAt } from "./room";
-import { Interpolator, InterpolatorLatency, Players } from "rune-games-sdk";
+import { InterpolatorLatency, Players } from "rune-games-sdk";
 import { Sound, loadSound, playSound } from "./renderer/sound";
 import nipplejs, { JoystickManager } from 'nipplejs';
 
