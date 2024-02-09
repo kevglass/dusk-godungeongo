@@ -466,26 +466,24 @@ export class GoDungeonGo implements InputEventListener {
                 });
             }
         }
-        if (update.event?.name === "update") {
-            // load any avatar images we haven't already got
-            for (const playerId in update.players) {
-                if (!this.avatarImages[playerId]) {
-                    this.avatarImages[playerId] = loadImage(update.players[playerId].avatarUrl);
-                }
+        // load any avatar images we haven't already got
+        for (const playerId in update.players) {
+            if (!this.avatarImages[playerId]) {
+                this.avatarImages[playerId] = loadImage(update.players[playerId].avatarUrl);
             }
+        }
 
-            // cause the entities in the game to update 
-            // to match the current game state.
-            for (const entity of this.game.entities) {
-                const sprite = this.entitySprites[entity.id];
-                const futureEntity = update.futureGame?.entities.find(e => e.id === entity.id);
+        // cause the entities in the game to update 
+        // to match the current game state.
+        for (const entity of this.game.entities) {
+            const sprite = this.entitySprites[entity.id];
+            const futureEntity = update.futureGame?.entities.find(e => e.id === entity.id);
 
-                if (futureEntity) {
-                    sprite.interpolator.update({
-                        game: [entity.x, entity.y],
-                        futureGame: [futureEntity.x, futureEntity.y]
-                    });
-                }
+            if (futureEntity) {
+                sprite.interpolator.update({
+                    game: [entity.x, entity.y],
+                    futureGame: [futureEntity.x, futureEntity.y]
+                });
             }
         }
 

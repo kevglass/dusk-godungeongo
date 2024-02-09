@@ -42,6 +42,7 @@ canvas.addEventListener('contextmenu', event => {
 
 canvas.addEventListener("touchstart", (event) => {
     resumeAudioOnInput();
+    canvas.focus();
 
     for (const touch of event.changedTouches) {
         eventListener?.mouseDown(touch.clientX, touch.clientY, touch.identifier);
@@ -51,11 +52,13 @@ canvas.addEventListener("touchstart", (event) => {
     event.preventDefault();
 });
 
-window.addEventListener("keydown", (event) => {
+canvas.setAttribute("tabindex", "0");
+
+canvas.addEventListener("keydown", (event) => {
     eventListener?.keyDown(event.key);
 });
 
-window.addEventListener("keyup", (event) => {
+canvas.addEventListener("keyup", (event) => {
     eventListener?.keyUp(event.key);
 });
 
@@ -83,6 +86,8 @@ canvas.addEventListener("touchmove", (event) => {
 
 canvas.addEventListener("mousedown", (event) => {
     resumeAudioOnInput();
+    canvas.focus();
+
     eventListener?.mouseDown(event.x, event.y, event.button);
     mouseDown = true;
 
