@@ -17,7 +17,7 @@ import sfxSpeedUp from "./assets/speedup.mp3";
 import { Controls, Entity, EntityType, RUN } from "./entity";
 import { intersects } from "./renderer/util";
 import { Direction, Room, findAllRoomsAt, findRoomAt } from "./room";
-import { InterpolatorLatency, Players } from "rune-games-sdk";
+import { Interpolator, Players } from "rune-games-sdk";
 import { Sound, loadSound, playSound } from "./renderer/sound";
 import nipplejs, { JoystickManager } from 'nipplejs';
 
@@ -117,12 +117,12 @@ export class EntitySprite {
     // the animation frame
     frame = 0;
     // the interpolator used to smooth movement
-    interpolator: InterpolatorLatency<number[]>
+    interpolator: Interpolator<number[]>
     // the last few locations where the puffs of smoke are generated
     lastFrames: Puff[] = [];
 
-    constructor() {
-        this.interpolator = Rune.interpolatorLatency({ maxSpeed: 15 })
+    constructor(localPlayer: boolean) {
+        this.interpolator = localPlayer ? Rune.interpolator() : Rune.interpolatorLatency({ maxSpeed: 15 })
     }
 
     update(x: number, y: number, controls: Controls) {
@@ -267,6 +267,7 @@ export class GoDungeonGo implements InputEventListener {
         up: false,
         down: false
     };
+    lastActionedControls = { ...this.controls };
 
     constructor() {
         // load all the resources
@@ -459,7 +460,7 @@ export class GoDungeonGo implements InputEventListener {
 
         for (const entity of this.game.entities) {
             if (!this.entitySprites[entity.id]) {
-                this.entitySprites[entity.id] = new EntitySprite();
+                this.entitySprites[entity.id] = new EntitySprite(entity.id === this.playerId);
                 this.entitySprites[entity.id].interpolator.update({
                     game: [entity.x, entity.y],
                     futureGame: [entity.x, entity.y]
@@ -511,11 +512,10 @@ export class GoDungeonGo implements InputEventListener {
 
     updateControls(): void {
         if (this.game) {
-            const myEntity = this.game.entities.find(e => e.id === this.playerId);
-            if (myEntity &&
-                ((myEntity.controls.left !== this.controls.left) || (myEntity.controls.right !== this.controls.right) ||
-                    (myEntity.controls.up !== this.controls.up) || (myEntity.controls.down !== this.controls.down))) {
+            if ((this.lastActionedControls.left !== this.controls.left) || (this.lastActionedControls.right !== this.controls.right) ||
+                (this.lastActionedControls.up !== this.controls.up) || (this.lastActionedControls.down !== this.controls.down)) {
                 Rune.actions.applyControls({ ...this.controls });
+                this.lastActionedControls = { ...this.controls };
             }
         }
     }
@@ -1119,7 +1119,7 @@ export class GoDungeonGo implements InputEventListener {
             }
 
             const versionString = "1.03";
-            drawText(screenWidth() - stringWidth(versionString, 12)-5, screenHeight() - 5, versionString, 12, "white");
+            drawText(screenWidth() - stringWidth(versionString, 12) - 5, screenHeight() - 5, versionString, 12, "white");
         }
 
         // render game controls
