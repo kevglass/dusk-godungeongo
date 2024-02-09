@@ -1119,6 +1119,9 @@ export class GoDungeonGo implements InputEventListener {
                 const name = CHAR_NAMES[this.selectedType];
                 drawText(Math.floor((screenWidth() - stringWidth(name, 20)) / 2), 230, name, 20, "white");
             }
+
+            const versionString = "1.03";
+            drawText(screenWidth() - stringWidth(versionString, 12)-5, screenHeight() - 5, versionString, 12, "white");
         }
 
         // render game controls
