@@ -59,6 +59,12 @@ export interface GameState {
   // A list of events that have occurred in the game loop so the
   // client can render effects and play sounds related
   events: GameEvent[];
+  // The number of rooms to be generated
+  roomCount: number;
+  // The number of keys to place
+  keyCount: number;
+  // The level of difficulty
+  level: number;
 }
 
 // Game Events report things that have happened in the game logic
@@ -179,6 +185,17 @@ function startGame(state: GameState) {
   state.endGameTime = 0;
   state.gameOver = false;
   state.gameOverTime = 0;
+  state.level++;
+
+  if (state.level > 2) {
+    state.keyCount = 3;
+  }
+  if (state.level > 2) {
+    state.roomCount = 40;
+  }
+  if (state.level > 5) {
+    state.roomCount = 50;
+  }
 
   generateDungeon(state);
 
@@ -207,7 +224,10 @@ Rune.initLogic({
       endGameTime: 0,
       gameOver: false,
       gameOverTime: 0,
-      events: []
+      events: [],
+      roomCount: 30,
+      keyCount: 2,
+      level: 0
     }
 
     startGame(initialState);

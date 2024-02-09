@@ -1,5 +1,5 @@
 import { GameEventType, GameState, GameUpdate, HURT_GRACE, getSpikeState } from "./logic";
-import { InputEventListener, TileSet, drawImage, drawText, drawTile, fillCircle, fillRect, halfCircle, loadImage, loadTileSet, popState, pushState, registerInputEventListener, scale, screenHeight, screenWidth, setAlpha, stringWidth, translate, updateGraphics } from "./renderer/graphics";
+import { InputEventListener, TileSet, drawImage, drawRect, drawText, drawTile, fillCircle, fillRect, halfCircle, loadImage, loadTileSet, popState, pushState, registerInputEventListener, scale, screenHeight, screenWidth, setAlpha, stringWidth, translate, updateGraphics } from "./renderer/graphics";
 import gfxTilesUrl from "./assets/tileset.png";
 import gfxTilesRedUrl from "./assets/tilesetred.png";
 import gfxTiles2xUrl from "./assets/tileset2x.png";
@@ -660,7 +660,7 @@ export class GoDungeonGo implements InputEventListener {
         const halfX = Math.floor(room.width / 2) - 1;
         const halfY = Math.floor(room.height / 2) - 1;
 
-        const hasAllKeys = myEntity?.bronzeKey && myEntity?.goldKey && myEntity?.silverKey
+        const hasAllKeys = (myEntity?.bronzeKey || (this.game?.keyCount ?? 0 < 3)) && myEntity?.goldKey && myEntity?.silverKey
 
         // north door
         if (room.connections[Direction.NORTH]) {
@@ -969,6 +969,9 @@ export class GoDungeonGo implements InputEventListener {
                                 if (room.item === "gold") {
                                     col = "rgba(255,255,0,0.8)";
                                 }
+                                if (room.enemy || room.spikes) {
+                                    col = "rgba(255,50,50,0.4)";
+                                }
                                 fillRect(room.x, room.y, room.width, room.height, col);
                                 if (room.connections[Direction.NORTH]) {
                                     fillRect(room.x + (room.width / 2) - 2, room.y - 2, 4, 2, room.doors[Direction.NORTH] ? "rgb(255,255,0)" : "rgb(200,200,200)");
@@ -1020,15 +1023,38 @@ export class GoDungeonGo implements InputEventListener {
 
                 // draw the status message
                 if (this.game.atStart) {
-                    fillRect(0, 130, screenWidth(), 100, "rgba(0,0,0,0.5)");
-                    drawText(Math.floor(screenWidth() - stringWidth(this.game.statusMessage, 20)) / 2, 160, this.game.statusMessage, 20, "white");
+                    fillRect(0, 130, screenWidth(), 200, "rgba(0,0,0,0.5)");
+
+                    if (this.game.countDown > 2) {
+                        const message = "Find the Keys!";
+                        let x = (screenWidth() / 2) - 32;
+                        if (this.game.keyCount > 2) {
+                            x -= 16;
+                        }
+                        const keys = [9, 10, 11];
+                        for (let i=0;i<this.game.keyCount;i++) {
+                            drawTile(this.tiles, Math.floor(x + (i*32)),170,keys[i]);
+                        }
+                        drawText(Math.floor(screenWidth() - stringWidth(message, 20)) / 2, 160, message, 20, "white");
+                    } else if (this.game.countDown > 0) {
+                        const message = "Get the Egg!";
+                        drawTile(this.tiles, Math.floor((screenWidth() / 2) - 16),148, 22);
+                        drawTile(this.tiles, Math.floor((screenWidth() / 2) - 16),180, 38);
+                        drawText(Math.floor(screenWidth() - stringWidth(message, 20)) / 2, 160, message, 20, "white");
+                    } else {
+                        const message = this.game.statusMessage;
+                        drawText(Math.floor(screenWidth() - stringWidth(message, 20)) / 2, 160, message, 20, "white");
+                    }
+                    
                     if (this.game.countDown > 0) {
-                        drawText(Math.floor(screenWidth() - stringWidth(this.game.countDown + "", 50)) / 2, 220, this.game.countDown + "", 50, "white");
+                        fillCircle((Math.floor(screenWidth() - stringWidth(this.game.countDown + "", 50)) / 2)+15, 265, 40, "rgba(255,50,50,0.8)");
+                        drawText(Math.floor(screenWidth() - stringWidth(this.game.countDown + "", 50)) / 2, 280, this.game.countDown + "", 50, "white");
                     }
                 } else if (Rune.gameTime() - this.game.startRace < 1000 && Rune.gameTime() - this.game.startRace > 0) {
                     fillRect(0, 130, screenWidth(), 100, "rgba(0,0,0,0.5)");
-                    drawText(Math.floor(screenWidth() - stringWidth("Find the Keys! First to the Egg!", 20)) / 2, 160, "Find the Keys! First to the Egg!", 20, "#ee8e2e");
-                    drawText(Math.floor(screenWidth() - stringWidth("GO!", 50)) / 2, 220, "GO!", 50, "#4ba747");
+                    drawText(Math.floor(screenWidth() - stringWidth("Find the Keys! First to the Egg!", 20)) / 2, 160, "Find the Keys! First to the Egg!", 20, "white");
+                    fillCircle((Math.floor(screenWidth() - stringWidth("GO!", 50)) / 2)+45, 255, 60, "rgba(50,255,50,0.8)");
+                    drawText(Math.floor(screenWidth() - stringWidth("GO!", 50)) / 2, 270, "GO!", 50, "white");
                 } else if (this.game.gameOver) {
                     fillRect(0, 130, screenWidth(), 100, "rgba(0,0,0,0.5)");
                     if (this.game.winner && this.players) {
@@ -1039,7 +1065,6 @@ export class GoDungeonGo implements InputEventListener {
                         drawText(Math.floor(screenWidth() - stringWidth("TIME OUT!", 50)) / 2, 200, "TIME OUT!", 50, "#da4e38");
                     }
                 }
-
                 // draw the HUD for keys and health
                 if (this.game && !this.game.atStart && !this.game.gameOver) {
                     const remaining = Math.max(0, this.game.endGameTime - Rune.gameTime());

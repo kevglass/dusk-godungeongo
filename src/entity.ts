@@ -174,7 +174,7 @@ export function updateEntity(time: number, state: GameState, entity: Entity, ste
                 entity.x += speed;
             }
             let room = findRoomAt(state, entity.x, entity.y);
-            if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, entity.goldKey && entity.silverKey && entity.bronzeKey)) {
+            if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, entity.goldKey && entity.silverKey && (state.keyCount < 3 || entity.bronzeKey))) {
                 entity.x = oldX;
             }
 
@@ -187,7 +187,7 @@ export function updateEntity(time: number, state: GameState, entity: Entity, ste
                 entity.y += speed;
             }
             room = findRoomAt(state, entity.x, entity.y);
-            if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, entity.goldKey && entity.silverKey && entity.bronzeKey)) {
+            if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, entity.goldKey && entity.silverKey &&  (state.keyCount < 3 || entity.bronzeKey))) {
                 entity.y = oldY;
             }
         }

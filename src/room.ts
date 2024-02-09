@@ -38,6 +38,8 @@ export interface Room {
     // discovery of the room by any player is visible on the 
     // mini-map 
     discovered: boolean;
+    // True if an enemy was placed in the room
+    enemy: boolean;
     // True if the room has spike traps in it
     spikes: boolean;
     // The location of the spike traps relative to the room if any
@@ -66,11 +68,11 @@ export function generateDungeon(state: GameState): void {
     // create a starting room, it's always in the same place but might 
     // not be the room that players actually start in. It's the start
     // of the dungeon generation.
-    const startRoom: Room = { id: 1, x: 0, y: 0, width: 10, height: 10, connections: {}, doors: {}, depth: 0, discovered: false, spikes: false, spikeLocations: [] };
+    const startRoom: Room = { id: 1, x: 0, y: 0, width: 10, height: 10, connections: {}, doors: {}, depth: 0, discovered: false, spikes: false, spikeLocations: [], enemy: false };
     state.rooms.push(startRoom);
 
     // the number of rooms we're hoping to generate
-    const targetCount = 50;
+    const targetCount = state.roomCount;
     let nextId = 2;
 
     const eggRoom = startRoom;
@@ -106,7 +108,7 @@ export function generateDungeon(state: GameState): void {
         const direction = possibleDirections[Math.floor(Math.random() * possibleDirections.length)];
         const newRoom: Room = {
             id: nextId++, x: 0, y: 0, width: 6 + (Math.floor(Math.random() * 3) * 2), height: 6 + (Math.floor(Math.random() * 3) * 2),
-            connections: {}, doors: {}, depth: fromRoom.depth + 1, discovered: false, spikes: false, spikeLocations: []
+            connections: {}, doors: {}, depth: fromRoom.depth + 1, discovered: false, spikes: false, spikeLocations: [], enemy: false
         };
         if (direction === Direction.NORTH) {
             newRoom.y = fromRoom.y - 2 - newRoom.height;
@@ -174,13 +176,16 @@ export function generateDungeon(state: GameState): void {
 
     // place the other unique items
     const toPlace: ((room: Room) => void)[] = [
-        (room: Room) => { room.item = "bronze" },
         (room: Room) => { room.item = "silver" },
         (room: Room) => { room.item = "gold" },
         (room: Room) => { room.item = "treasure" },
         (room: Room) => { room.item = "treasure" },
         (room: Room) => { room.item = "treasure" },
     ];
+
+    if (state.keyCount > 2) {
+        toPlace.push((room: Room) => { room.item = "bronze" });
+    }
 
     // try and place the unique items as far apart and from the start
     // as possible to make it a challenge
@@ -205,6 +210,7 @@ export function generateDungeon(state: GameState): void {
     state.rooms.filter(r => r !== deepestRoom && !r.item).forEach(target => {
         if (Math.random() > 0.8) {
             // add a monster
+            target.enemy = true;
             const monster = createEntity("monster" + (monsterIndex++), Math.floor(target.x + (target.width / 2)) * 32, Math.floor(target.y + (target.height / 2)) * 32, EntityType.MONSTER);
             monster.speed = 2;
             state.entities.push(monster);
