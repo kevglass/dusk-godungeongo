@@ -663,7 +663,7 @@ export class GoDungeonGo implements InputEventListener {
         const hasAllKeys = (myEntity?.bronzeKey || (this.game?.keyCount ?? 0 < 3)) && myEntity?.goldKey && myEntity?.silverKey
 
         let base = 0;
-        if (this.game?.keyCount ?? 0< 3) {
+        if ((this.game?.keyCount ?? 0) < 3) {
             base = 196;
         }
 
