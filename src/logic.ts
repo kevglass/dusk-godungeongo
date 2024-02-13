@@ -167,6 +167,7 @@ function respawn(state: GameState, entity: Entity) {
     newPlayer.bronzeKey = entity.bronzeKey;
     newPlayer.goldKey = entity.goldKey;
     newPlayer.silverKey = entity.silverKey;
+    newPlayer.respawnedAt = Rune.gameTime();
   }
 }
 
@@ -410,6 +411,11 @@ Rune.initLogic({
     // check to see if the players are hitting anything that can hurt them 
     // if they are apply the health change and potential respawn
     for (const entity of context.game.entities.filter(e => e.type !== EntityType.MONSTER)) {
+      // have to wait a second if you respawn
+      if (Rune.gameTime() < entity.respawnedAt + 1000) {
+        continue;
+      }
+
       const room = findRoomAt(context.game, entity.x, entity.y);
 
       // players can only be hurt every couple of seconds. They'll go into the traditional 

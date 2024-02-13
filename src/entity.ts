@@ -80,6 +80,9 @@ export interface Entity {
     // The game time at which this player was last hurt - this lets us give them some grace
     // between being hit
     hurtAt: number;
+    // The time at which the entity was respawned - allows a second delay after respawn
+    // and an effect
+    respawnedAt: number;
 }
 
 // Create an entity and return it. Note that the entity created 
@@ -99,7 +102,8 @@ export function createEntity(id: string, x: number, y: number, type: EntityType)
         silverKey: false,
         bronzeKey: false,
         health: 3,
-        hurtAt: -10000
+        hurtAt: -10000,
+        respawnedAt: 0
     }
 }
 

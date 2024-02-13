@@ -662,6 +662,11 @@ export class GoDungeonGo implements InputEventListener {
 
         const hasAllKeys = (myEntity?.bronzeKey || (this.game?.keyCount ?? 0 < 3)) && myEntity?.goldKey && myEntity?.silverKey
 
+        let base = 0;
+        if (this.game?.keyCount ?? 0< 3) {
+            base = 196;
+        }
+
         // north door
         if (room.connections[Direction.NORTH]) {
             drawTile(this.tiles, halfX * 32, 0, 64);
@@ -679,8 +684,8 @@ export class GoDungeonGo implements InputEventListener {
                 if (hasAllKeys) {
                     setAlpha(0.5);
                 }
-                drawTile(this.tiles, halfX * 32, -32, 12);
-                drawTile(this.tiles, (halfX + 1) * 32, -32, 13);
+                drawTile(this.tiles, halfX * 32, -32, base+12);
+                drawTile(this.tiles, (halfX + 1) * 32, -32, base+13);
                 setAlpha(1);
             }
         }
@@ -701,8 +706,8 @@ export class GoDungeonGo implements InputEventListener {
                 if (hasAllKeys) {
                     setAlpha(0.5);
                 }
-                drawTile(this.tiles, halfX * 32, (room.height * 32) + 32, 12);
-                drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32) + 32, 13);
+                drawTile(this.tiles, halfX * 32, (room.height * 32) + 32, base+12);
+                drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32) + 32, base+13);
                 setAlpha(1);
             }
         }
@@ -727,9 +732,9 @@ export class GoDungeonGo implements InputEventListener {
                 if (hasAllKeys) {
                     setAlpha(0.5);
                 }
-                drawTile(this.tiles, -48, (halfY * 32) - 31, 14);
-                drawTile(this.tiles, -48, (halfY * 32) + 1, 30);
-                drawTile(this.tiles, -48, (halfY * 32) + 33, 46);
+                drawTile(this.tiles, -48, (halfY * 32) - 31, base+14);
+                drawTile(this.tiles, -48, (halfY * 32) + 1, base+30);
+                drawTile(this.tiles, -48, (halfY * 32) + 33, base+46);
                 setAlpha(1);
             }
         }
@@ -757,9 +762,9 @@ export class GoDungeonGo implements InputEventListener {
                 if (hasAllKeys) {
                     setAlpha(0.5);
                 }
-                drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) - 31, 14);
-                drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) + 1, 30);
-                drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) + 33, 46);
+                drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) - 31, base+14);
+                drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) + 1, base+30);
+                drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) + 33, base+46);
                 setAlpha(1);
             }
         }
@@ -920,6 +925,19 @@ export class GoDungeonGo implements InputEventListener {
                                 translate(-32, 0);
                             }
 
+                            translate(16,16);
+                            if (Rune.gameTime() < entity.respawnedAt + 1000) {
+                                // respawn in place, do the effect
+                                let delta = 1 - (((entity.respawnedAt + 1000) - Rune.gameTime()) / 1000);
+                                if (delta > 0.5) { 
+                                    delta = (delta - 0.5) / 0.5;
+                                    setAlpha(delta);
+                                    scale(5 - (delta * 4), 5 - (delta * 4));
+                                } else {
+                                    popState();
+                                    continue;
+                                }
+                            }
                             let tiles = this.tiles;
                             // use the red set if the player is hurt
                             if (Rune.gameTime() - entity.hurtAt < HURT_GRACE) {
@@ -928,8 +946,8 @@ export class GoDungeonGo implements InputEventListener {
                                     tiles = this.tilesRed;
                                 }
                             }
-                            drawTile(tiles, 0, -32, entity.type + Math.floor(entity.anim.base + sprite.frame));
-                            drawTile(tiles, 0, 0, entity.type + 16 + Math.floor(entity.anim.base + sprite.frame));
+                            drawTile(tiles, -16, -48, entity.type + Math.floor(entity.anim.base + sprite.frame));
+                            drawTile(tiles, -16, -16, entity.type + 16 + Math.floor(entity.anim.base + sprite.frame));
 
                             popState();
                         }
