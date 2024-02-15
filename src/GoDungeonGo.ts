@@ -317,6 +317,10 @@ export class GoDungeonGo implements InputEventListener {
         });
     }
 
+    resourcesLoaded(): void {
+        // do nothing in this game its quick to load
+    }
+
     // start the game
     start(): void {
         // register ourselves as the input listener so
