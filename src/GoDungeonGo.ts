@@ -1,5 +1,4 @@
 import { GameEventType, GameState, GameUpdate, HURT_GRACE, getSpikeState } from "./logic";
-import { InputEventListener, TileSet, drawImage, drawText, drawTile, fillCircle, fillRect, halfCircle, loadImage, loadTileSet, popState, pushState, registerInputEventListener, scale, screenHeight, screenWidth, setAlpha, stringWidth, translate, updateGraphics } from "./renderer/graphics";
 import gfxTilesUrl from "./assets/tileset.png";
 import gfxTilesRedUrl from "./assets/tilesetred.png";
 import gfxTiles2xUrl from "./assets/tileset2x.png";
@@ -15,11 +14,11 @@ import sfxHealUp from "./assets/healup.mp3";
 import sfxSpeedUp from "./assets/speedup.mp3";
 
 import { Controls, Entity, EntityType, RUN } from "./entity";
-import { intersects } from "./renderer/util";
 import { Direction, Room, findAllRoomsAt, findRoomAt } from "./room";
 import { Interpolator, Players } from "rune-games-sdk";
-import { Sound, loadSound, playSound } from "./renderer/sound";
 import nipplejs, { JoystickManager } from 'nipplejs';
+import { Game, Sound, TileSet, graphics, sound } from "togl";
+import { intersects } from "./util";
 
 
 // a predictable random used to generate the random
@@ -187,7 +186,7 @@ interface CollectEffect {
 // As players explore the mini-map updates for everyone, so the first player to find 
 // the gold key has also given it's location away to the other players etc.
 //
-export class GoDungeonGo implements InputEventListener {
+export class GoDungeonGo implements Game {
     // 2x scaled up versions of the tile set, saves us doing any scaling manipulation
     // at runtime.
     tiles2x: TileSet;
@@ -271,19 +270,19 @@ export class GoDungeonGo implements InputEventListener {
 
     constructor() {
         // load all the resources
-        this.tiles = loadTileSet(gfxTilesUrl, 32, 32);
-        this.tilesRed = loadTileSet(gfxTilesRedUrl, 32, 32);
-        this.tiles2x = loadTileSet(gfxTiles2xUrl, 64, 64);
-        this.logo = loadImage(gfxLogo);
-        this.sfxKey = loadSound(sfxKey);
-        this.sfxCollect = loadSound(sfxCollect);
-        this.sfxCountdown = loadSound(sfxCountdown);
-        this.sfxWin = loadSound(sfxWin);
-        this.sfxFail = loadSound(sfxFail);
-        this.sfxDead = loadSound(sfxDead);
-        this.sfxHurt = loadSound(sfxHurt);
-        this.sfxHealUp = loadSound(sfxHealUp);
-        this.sfxSpeedUp = loadSound(sfxSpeedUp);
+        this.tiles = graphics.loadTileSet(gfxTilesUrl, 32, 32);
+        this.tilesRed = graphics.loadTileSet(gfxTilesRedUrl, 32, 32);
+        this.tiles2x = graphics.loadTileSet(gfxTiles2xUrl, 64, 64);
+        this.logo = graphics.loadImage(gfxLogo);
+        this.sfxKey = sound.loadSound(sfxKey);
+        this.sfxCollect = sound.loadSound(sfxCollect);
+        this.sfxCountdown = sound.loadSound(sfxCountdown);
+        this.sfxWin = sound.loadSound(sfxWin);
+        this.sfxFail = sound.loadSound(sfxFail);
+        this.sfxDead = sound.loadSound(sfxDead);
+        this.sfxHurt = sound.loadSound(sfxHurt);
+        this.sfxHealUp = sound.loadSound(sfxHealUp);
+        this.sfxSpeedUp = sound.loadSound(sfxSpeedUp);
 
         // select a random type, might help players get familiar with possible characters
         this.selectedType = this.typeOptions[Math.floor(Math.random() * this.typeOptions.length)];
@@ -316,17 +315,7 @@ export class GoDungeonGo implements InputEventListener {
             this.controls.down = false;
         });
     }
-
     resourcesLoaded(): void {
-        // do nothing in this game its quick to load
-    }
-
-    // start the game
-    start(): void {
-        // register ourselves as the input listener so
-        // we get nofified of mouse presses
-        registerInputEventListener(this);
-
         // tell rune to let us know when a game
         // update happens
         Rune.initClient({
@@ -334,9 +323,13 @@ export class GoDungeonGo implements InputEventListener {
                 this.gameUpdate(update);
             },
         });
+    }
 
-        // start the rendering loop
-        requestAnimationFrame(() => { this.loop() });
+    // start the game
+    start(): void {
+        // register ourselves as the input listener so
+        // we get nofified of mouse presses
+        graphics.startRendering(this);
     }
 
     // notification of a new game state from the Rune SDK
@@ -353,13 +346,13 @@ export class GoDungeonGo implements InputEventListener {
             // if we got hurt play the SFX
             if (event.type === GameEventType.HURT) {
                 if (event.who === this.playerId) {
-                    playSound(this.sfxHurt);
+                    sound.playSound(this.sfxHurt);
                 }
             }
             // if we died play the SFX
             if (event.type === GameEventType.DEATH) {
                 if (event.who === this.playerId) {
-                    playSound(this.sfxDead);
+                    sound.playSound(this.sfxDead);
                 }
                 if (event.who) {
                     delete this.entitySprites[event.who];
@@ -367,29 +360,29 @@ export class GoDungeonGo implements InputEventListener {
             }
             // play the win SFX
             if (event.type === GameEventType.WIN) {
-                playSound(this.sfxWin);
+                sound.playSound(this.sfxWin);
             }
             // play the ran out of time SFX
             if (event.type === GameEventType.TIME_OUT) {
-                playSound(this.sfxFail);
+                sound.playSound(this.sfxFail);
             }
             if (event.type === GameEventType.START_COUNTDOWN) {
                 // delay the countdown by one second since for 
                 // some reason it only has 5 beeps 
                 setTimeout(() => {
-                    playSound(this.sfxCountdown);
+                    sound.playSound(this.sfxCountdown);
                 }, 1000);
             }
             // if we used a speed potion play the sound
             if (event.type === GameEventType.SPEED_UP) {
                 if (event.who === this.playerId) {
-                    playSound(this.sfxSpeedUp);
+                    sound.playSound(this.sfxSpeedUp);
                 }
             }
             // if we used a heal potion play the sound
             if (event.type === GameEventType.HEAL_UP) {
                 if (event.who === this.playerId) {
-                    playSound(this.sfxHealUp);
+                    sound.playSound(this.sfxHealUp);
                 }
             }
             // if its us who picked up the item play the SFX and run the effect
@@ -398,7 +391,7 @@ export class GoDungeonGo implements InputEventListener {
                     if (event.x && event.y) {
                         this.effects.push({ x: event.x * 32, y: event.y * 32, life: 30, tile: 27 })
                     }
-                    playSound(this.sfxCollect);
+                    sound.playSound(this.sfxCollect);
                 }
             }
             // if its us who picked up the item play the SFX and run the effect
@@ -407,7 +400,7 @@ export class GoDungeonGo implements InputEventListener {
                     if (event.x && event.y) {
                         this.effects.push({ x: event.x * 32, y: event.y * 32, life: 30, tile: 28 })
                     }
-                    playSound(this.sfxCollect);
+                    sound.playSound(this.sfxCollect);
                 }
             }
             // if its us who picked up the item play the SFX and run the effect
@@ -416,7 +409,7 @@ export class GoDungeonGo implements InputEventListener {
                     if (event.x && event.y) {
                         this.effects.push({ x: event.x * 32, y: event.y * 32, life: 30, tile: 6 })
                     }
-                    playSound(this.sfxCollect);
+                    sound.playSound(this.sfxCollect);
                 }
             }
             // if its us who picked up the item play the SFX and run the effect
@@ -425,7 +418,7 @@ export class GoDungeonGo implements InputEventListener {
                     if (event.x && event.y) {
                         this.effects.push({ x: event.x * 32, y: event.y * 32, life: 30, tile: 11 })
                     }
-                    playSound(this.sfxKey);
+                    sound.playSound(this.sfxKey);
                 }
             }
             // if its us who picked up the item play the SFX and run the effect
@@ -434,7 +427,7 @@ export class GoDungeonGo implements InputEventListener {
                     if (event.x && event.y) {
                         this.effects.push({ x: event.x * 32, y: event.y * 32, life: 30, tile: 10 })
                     }
-                    playSound(this.sfxKey);
+                    sound.playSound(this.sfxKey);
                 }
             }
             // if its us who picked up the item play the SFX and run the effect
@@ -443,7 +436,7 @@ export class GoDungeonGo implements InputEventListener {
                     if (event.x && event.y) {
                         this.effects.push({ x: event.x * 32, y: event.y * 32, life: 30, tile: 9 })
                     }
-                    playSound(this.sfxKey);
+                    sound.playSound(this.sfxKey);
                 }
             }
         }
@@ -474,7 +467,7 @@ export class GoDungeonGo implements InputEventListener {
         // load any avatar images we haven't already got
         for (const playerId in update.players) {
             if (!this.avatarImages[playerId]) {
-                this.avatarImages[playerId] = loadImage(update.players[playerId].avatarUrl);
+                this.avatarImages[playerId] = graphics.loadImage(update.players[playerId].avatarUrl, false);
             }
         }
 
@@ -527,9 +520,9 @@ export class GoDungeonGo implements InputEventListener {
     // Notification of a mouse press or touch start
     mouseDown(x: number, y: number): void {
         if (this.joined) {
-            const controlsY = screenHeight() - this.controlSize - this.controlVerticalPadding;
+            const controlsY = graphics.height() - this.controlSize - this.controlVerticalPadding;
 
-            if (intersects(x, y, screenWidth() - this.controlSize - this.controlHorizontalPadding, controlsY, this.controlSize, this.controlSize)) {
+            if (intersects(x, y, graphics.width() - this.controlSize - this.controlHorizontalPadding, controlsY, this.controlSize, this.controlSize)) {
                 Rune.actions.useItem();
             }
         }
@@ -554,7 +547,7 @@ export class GoDungeonGo implements InputEventListener {
                 }
 
                 this.selectedType = this.typeOptions[index];
-            } else if (x > screenWidth() - 84) {
+            } else if (x > graphics.width() - 84) {
                 // right press
                 let index = this.typeOptions.indexOf(this.selectedType);
                 if (index < this.typeOptions.length - 1) {
@@ -627,39 +620,39 @@ export class GoDungeonGo implements InputEventListener {
             myEntity = this.game.entities.find(e => e.id === this.playerId)
         }
 
-        pushState();
-        translate(room.x * 32, room.y * 32);
+        graphics.push();
+        graphics.translate(room.x * 32, room.y * 32);
 
         // render the floor
         for (let x = 0; x < room.width; x++) {
             for (let y = 0; y < room.height; y++) {
-                drawTile(this.tiles, x * 32, y * 32, FLOOR_MAP[Math.abs((x * y) % FLOOR_MAP.length)]);
+                graphics.drawTile(this.tiles, x * 32, y * 32, FLOOR_MAP[Math.abs((x * y) % FLOOR_MAP.length)]);
             }
         }
 
         // render top/bottom walls
         for (let x = 1; x < room.width - 1; x++) {
-            drawTile(this.tiles, x * 32, -32, 0);
-            drawTile(this.tiles, x * 32, 0, WALL_MAP[Math.abs((x * room.y) % WALL_MAP.length)]);
-            drawTile(this.tiles, x * 32, (room.height * 32) - 32, 0);
-            drawTile(this.tiles, x * 32, (room.height * 32), 16);
+            graphics.drawTile(this.tiles, x * 32, -32, 0);
+            graphics.drawTile(this.tiles, x * 32, 0, WALL_MAP[Math.abs((x * room.y) % WALL_MAP.length)]);
+            graphics.drawTile(this.tiles, x * 32, (room.height * 32) - 32, 0);
+            graphics.drawTile(this.tiles, x * 32, (room.height * 32), 16);
         }
 
         // render left/right walls
         for (let y = 1; y < room.height - 1; y++) {
-            drawTile(this.tiles, 0, y * 32, 129);
-            drawTile(this.tiles, (room.width * 32) - 32, y * 32, 128);
+            graphics.drawTile(this.tiles, 0, y * 32, 129);
+            graphics.drawTile(this.tiles, (room.width * 32) - 32, y * 32, 128);
         }
 
         // corners
-        drawTile(this.tiles, 0, -32, 114);
-        drawTile(this.tiles, 0, 0, 130);
-        drawTile(this.tiles, (room.width * 32) - 32, -32, 115);
-        drawTile(this.tiles, (room.width * 32) - 32, 0, 131);
-        drawTile(this.tiles, 0, (room.height * 32) - 32, 146);
-        drawTile(this.tiles, 0, (room.height * 32), 162);
-        drawTile(this.tiles, (room.width * 32) - 32, (room.height * 32) - 32, 147);
-        drawTile(this.tiles, (room.width * 32) - 32, (room.height * 32), 163);
+        graphics.drawTile(this.tiles, 0, -32, 114);
+        graphics.drawTile(this.tiles, 0, 0, 130);
+        graphics.drawTile(this.tiles, (room.width * 32) - 32, -32, 115);
+        graphics.drawTile(this.tiles, (room.width * 32) - 32, 0, 131);
+        graphics.drawTile(this.tiles, 0, (room.height * 32) - 32, 146);
+        graphics.drawTile(this.tiles, 0, (room.height * 32), 162);
+        graphics.drawTile(this.tiles, (room.width * 32) - 32, (room.height * 32) - 32, 147);
+        graphics.drawTile(this.tiles, (room.width * 32) - 32, (room.height * 32), 163);
 
         const halfX = Math.floor(room.width / 2) - 1;
         const halfY = Math.floor(room.height / 2) - 1;
@@ -673,128 +666,128 @@ export class GoDungeonGo implements InputEventListener {
 
         // north door
         if (room.connections[Direction.NORTH]) {
-            drawTile(this.tiles, halfX * 32, 0, 64);
-            drawTile(this.tiles, (halfX + 1) * 32, 0, 64);
-            drawTile(this.tiles, halfX * 32, -32, 64);
-            drawTile(this.tiles, (halfX + 1) * 32, -32, 64);
-            drawTile(this.tiles, (halfX - 1) * 32, -32, 128);
-            drawTile(this.tiles, (halfX + 2) * 32, -32, 129);
+            graphics.drawTile(this.tiles, halfX * 32, 0, 64);
+            graphics.drawTile(this.tiles, (halfX + 1) * 32, 0, 64);
+            graphics.drawTile(this.tiles, halfX * 32, -32, 64);
+            graphics.drawTile(this.tiles, (halfX + 1) * 32, -32, 64);
+            graphics.drawTile(this.tiles, (halfX - 1) * 32, -32, 128);
+            graphics.drawTile(this.tiles, (halfX + 2) * 32, -32, 129);
 
             if (this.game?.atStart) {
-                drawTile(this.tiles, halfX * 32, -32, 45);
-                drawTile(this.tiles, (halfX + 1) * 32, -32, 45);
+                graphics.drawTile(this.tiles, halfX * 32, -32, 45);
+                graphics.drawTile(this.tiles, (halfX + 1) * 32, -32, 45);
             }
             if (room.doors[Direction.NORTH]) {
                 if (hasAllKeys) {
-                    setAlpha(0.5);
+                    graphics.alpha(0.5);
                 }
-                drawTile(this.tiles, halfX * 32, -32, base+12);
-                drawTile(this.tiles, (halfX + 1) * 32, -32, base+13);
-                setAlpha(1);
+                graphics.drawTile(this.tiles, halfX * 32, -32, base+12);
+                graphics.drawTile(this.tiles, (halfX + 1) * 32, -32, base+13);
+                graphics.alpha(1);
             }
         }
         // south door
         if (room.connections[Direction.SOUTH]) {
-            drawTile(this.tiles, halfX * 32, (room.height * 32) - 32, 64);
-            drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32) - 32, 64);
-            drawTile(this.tiles, halfX * 32, (room.height * 32), 64);
-            drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32), 64);
-            drawTile(this.tiles, (halfX - 1) * 32, (room.height * 32), 128);
-            drawTile(this.tiles, (halfX + 2) * 32, (room.height * 32), 129);
+            graphics.drawTile(this.tiles, halfX * 32, (room.height * 32) - 32, 64);
+            graphics.drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32) - 32, 64);
+            graphics.drawTile(this.tiles, halfX * 32, (room.height * 32), 64);
+            graphics.drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32), 64);
+            graphics.drawTile(this.tiles, (halfX - 1) * 32, (room.height * 32), 128);
+            graphics.drawTile(this.tiles, (halfX + 2) * 32, (room.height * 32), 129);
 
             if (this.game?.atStart) {
-                drawTile(this.tiles, halfX * 32, (room.height * 32), 45);
-                drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32), 45);
+                graphics.drawTile(this.tiles, halfX * 32, (room.height * 32), 45);
+                graphics.drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32), 45);
             }
             if (room.doors[Direction.SOUTH]) {
                 if (hasAllKeys) {
-                    setAlpha(0.5);
+                    graphics.alpha(0.5);
                 }
-                drawTile(this.tiles, halfX * 32, (room.height * 32) + 32, base+12);
-                drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32) + 32, base+13);
-                setAlpha(1);
+                graphics.drawTile(this.tiles, halfX * 32, (room.height * 32) + 32, base+12);
+                graphics.drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32) + 32, base+13);
+                graphics.alpha(1);
             }
         }
         // west door
         if (room.connections[Direction.WEST]) {
-            drawTile(this.tiles, 0, (halfY * 32), 64);
-            drawTile(this.tiles, 0, (halfY * 32) + 32, 64);
-            drawTile(this.tiles, -32, (halfY * 32), 64);
-            drawTile(this.tiles, -32, (halfY * 32) + 32, 64);
-            drawTile(this.tiles, -32, (halfY * 32) - 32, 16);
-            drawTile(this.tiles, 0, (halfY * 32) - 32, 145);
-            drawTile(this.tiles, -32, (halfY * 32) - 64, 0);
-            drawTile(this.tiles, -32, (halfY * 32) + 38, 0);
-            drawTile(this.tiles, -32, (halfY * 32) + 70, 16);
+            graphics.drawTile(this.tiles, 0, (halfY * 32), 64);
+            graphics.drawTile(this.tiles, 0, (halfY * 32) + 32, 64);
+            graphics.drawTile(this.tiles, -32, (halfY * 32), 64);
+            graphics.drawTile(this.tiles, -32, (halfY * 32) + 32, 64);
+            graphics.drawTile(this.tiles, -32, (halfY * 32) - 32, 16);
+            graphics.drawTile(this.tiles, 0, (halfY * 32) - 32, 145);
+            graphics.drawTile(this.tiles, -32, (halfY * 32) - 64, 0);
+            graphics.drawTile(this.tiles, -32, (halfY * 32) + 38, 0);
+            graphics.drawTile(this.tiles, -32, (halfY * 32) + 70, 16);
 
             if (this.game?.atStart) {
-                drawTile(this.tiles, -32, (halfY * 32) - 31, 61);
-                drawTile(this.tiles, -32, (halfY * 32) + 1, 61);
-                drawTile(this.tiles, -32, (halfY * 32) + 33, 61);
+                graphics.drawTile(this.tiles, -32, (halfY * 32) - 31, 61);
+                graphics.drawTile(this.tiles, -32, (halfY * 32) + 1, 61);
+                graphics.drawTile(this.tiles, -32, (halfY * 32) + 33, 61);
             }
             if (room.doors[Direction.WEST]) {
                 if (hasAllKeys) {
-                    setAlpha(0.5);
+                    graphics.alpha(0.5);
                 }
-                drawTile(this.tiles, -48, (halfY * 32) - 31, base+14);
-                drawTile(this.tiles, -48, (halfY * 32) + 1, base+30);
-                drawTile(this.tiles, -48, (halfY * 32) + 33, base+46);
-                setAlpha(1);
+                graphics.drawTile(this.tiles, -48, (halfY * 32) - 31, base+14);
+                graphics.drawTile(this.tiles, -48, (halfY * 32) + 1, base+30);
+                graphics.drawTile(this.tiles, -48, (halfY * 32) + 33, base+46);
+                graphics.alpha(1);
             }
         }
         // east door
         if (room.connections[Direction.EAST]) {
-            drawTile(this.tiles, room.width * 32, (halfY * 32), 64);
-            drawTile(this.tiles, room.width * 32, (halfY * 32) + 32, 64);
-            drawTile(this.tiles, room.width * 32 - 32, (halfY * 32), 64);
-            drawTile(this.tiles, room.width * 32 - 32, (halfY * 32) + 32, 64);
+            graphics.drawTile(this.tiles, room.width * 32, (halfY * 32), 64);
+            graphics.drawTile(this.tiles, room.width * 32, (halfY * 32) + 32, 64);
+            graphics.drawTile(this.tiles, room.width * 32 - 32, (halfY * 32), 64);
+            graphics.drawTile(this.tiles, room.width * 32 - 32, (halfY * 32) + 32, 64);
 
-            drawTile(this.tiles, room.width * 32, (halfY * 32) - 32, 16);
-            drawTile(this.tiles, (room.width * 32) - 32, (halfY * 32) - 32, 144);
-            drawTile(this.tiles, room.width * 32, (halfY * 32) - 64, 0);
+            graphics.drawTile(this.tiles, room.width * 32, (halfY * 32) - 32, 16);
+            graphics.drawTile(this.tiles, (room.width * 32) - 32, (halfY * 32) - 32, 144);
+            graphics.drawTile(this.tiles, room.width * 32, (halfY * 32) - 64, 0);
 
-            drawTile(this.tiles, room.width * 32, (halfY * 32) + 38, 0);
-            drawTile(this.tiles, room.width * 32, (halfY * 32) + 70, 16);
+            graphics.drawTile(this.tiles, room.width * 32, (halfY * 32) + 38, 0);
+            graphics.drawTile(this.tiles, room.width * 32, (halfY * 32) + 70, 16);
 
             if (this.game?.atStart) {
-                drawTile(this.tiles, (room.width * 32), (halfY * 32) - 31, 61);
-                drawTile(this.tiles, (room.width * 32), (halfY * 32) + 1, 61);
-                drawTile(this.tiles, (room.width * 32), (halfY * 32) + 33, 61);
+                graphics.drawTile(this.tiles, (room.width * 32), (halfY * 32) - 31, 61);
+                graphics.drawTile(this.tiles, (room.width * 32), (halfY * 32) + 1, 61);
+                graphics.drawTile(this.tiles, (room.width * 32), (halfY * 32) + 33, 61);
             }
 
             if (room.doors[Direction.EAST]) {
                 if (hasAllKeys) {
-                    setAlpha(0.5);
+                    graphics.alpha(0.5);
                 }
-                drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) - 31, base+14);
-                drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) + 1, base+30);
-                drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) + 33, base+46);
-                setAlpha(1);
+                graphics.drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) - 31, base+14);
+                graphics.drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) + 1, base+30);
+                graphics.drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) + 33, base+46);
+                graphics.alpha(1);
             }
         }
 
         // render any item in the world
         if (room.item === "treasure") {
-            drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 6);
+            graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 6);
         }
         if (room.item === "speed") {
-            drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 28);
+            graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 28);
         }
         if (room.item === "health") {
-            drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 27);
+            graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 27);
         }
         if (room.item === "bronze" && !myEntity?.bronzeKey) {
-            drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 11);
+            graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 11);
         }
         if (room.item === "silver" && !myEntity?.silverKey) {
-            drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 10);
+            graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 10);
         }
         if (room.item === "gold" && !myEntity?.goldKey) {
-            drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 9);
+            graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 9);
         }
         if (room.item === "egg") {
-            drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16) - 32, 22);
-            drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 38);
+            graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16) - 32, 22);
+            graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 38);
         }
 
         // if there are spikes render them
@@ -803,7 +796,7 @@ export class GoDungeonGo implements InputEventListener {
                 // get the spike state and render the appropriate sprite to have
                 // the spikes popping in and out
                 const frame = getSpikeState(location.x + room.x, location.y + room.y, Rune.gameTime());
-                drawTile(this.tiles, location.x * 32, location.y * 32, 176 + frame);
+                graphics.drawTile(this.tiles, location.x * 32, location.y * 32, 176 + frame);
             }
         }
 
@@ -812,21 +805,18 @@ export class GoDungeonGo implements InputEventListener {
         //     const myEntity = this.game.entities.find(e => e.id === this.playerId)
         //     if (myEntity) {
         //         if (inRoomSpace(room, myEntity.x, myEntity.y)) {
-        //             fillRect(-32, -32, (room.width + 2) * 32, (room.height + 2) * 32, "rgba(255,0,0,0.5)");
+        //             graphics.fillRect(-32, -32, (room.width + 2) * 32, (room.height + 2) * 32, "rgba(255,0,0,0.5)");
         //         }
         //     }
         // }
-        popState();
+        graphics.pop();
     }
 
-    loop(): void {
+    render(): void {
         // calculate the controls size based on the screen size
-        this.controlSize = screenWidth() / 5;
+        this.controlSize = graphics.width() / 5;
         this.controlHorizontalPadding = this.controlSize / 1.5
         this.controlVerticalPadding = this.controlSize;
-
-        // let the graphics do whatever it wants to do
-        updateGraphics();
 
         if (this.game) {
             if (this.joined) {
@@ -835,8 +825,8 @@ export class GoDungeonGo implements InputEventListener {
                 if (myEntity) {
                     const sprite = this.entitySprites[myEntity.id];
                     const pos = sprite.interpolator.getPosition();
-                    this.viewX = pos[0] - (screenWidth() / 2);
-                    this.viewY = pos[1] - (screenHeight() * 0.4);
+                    this.viewX = pos[0] - (graphics.width() / 2);
+                    this.viewY = pos[1] - (graphics.height() * 0.4);
 
                     for (const room of findAllRoomsAt(this.game, myEntity.x, myEntity.y)) {
                         const localRoom = this.localRooms[room.id];
@@ -850,8 +840,8 @@ export class GoDungeonGo implements InputEventListener {
                     }
                 }
 
-                pushState();
-                translate(-this.viewX, -this.viewY);
+                graphics.push();
+                graphics.translate(-this.viewX, -this.viewY);
 
                 // render all the rooms
                 for (const room of this.game.rooms) {
@@ -859,7 +849,7 @@ export class GoDungeonGo implements InputEventListener {
                         // very simple culling of rooms that are off screen.
                         const dx = Math.abs((room.x * 32) - myEntity.x)
                         const dy = Math.abs((room.y * 32) - myEntity.y);
-                        if (dx > screenWidth() * 2 || dy > screenHeight() * 2) {
+                        if (dx > graphics.width() * 2 || dy > graphics.height() * 2) {
                             continue;
                         }
                     }
@@ -867,9 +857,9 @@ export class GoDungeonGo implements InputEventListener {
                     const localRoom = this.localRooms[room.id];
                     if (localRoom && localRoom.discovered) {
                         // if the room is fading in on discovery then apply the alpha
-                        setAlpha(localRoom.fade);
+                        graphics.alpha(localRoom.fade);
                         this.drawRoom(room);
-                        setAlpha(1);
+                        graphics.alpha(1);
                     }
                 }
 
@@ -898,7 +888,7 @@ export class GoDungeonGo implements InputEventListener {
                                 sprite.frame = 0;
                             }
 
-                            pushState();
+                            graphics.push();
 
                             // draw the smoke/dust trail for running fast!
                             if (entity.type !== EntityType.MONSTER) {
@@ -908,37 +898,37 @@ export class GoDungeonGo implements InputEventListener {
                                         continue;
                                     }
                                     const scale = remaining / PUFF_TIME;
-                                    setAlpha(scale);
-                                    halfCircle(puff.x - puff.offset, puff.y - puff.offset, puff.size, entity.speed > 10 ? puff.speedCol : puff.col);
-                                    setAlpha(1);
+                                    graphics.alpha(scale);
+                                    graphics.halfCircle(puff.x - puff.offset, puff.y - puff.offset, puff.size, entity.speed > 10 ? puff.speedCol : puff.col);
+                                    graphics.alpha(1);
                                 }
                             }
 
                             // draw the actual character 
-                            translate(pos[0] - 16, pos[1] - 32);
+                            graphics.translate(pos[0] - 16, pos[1] - 32);
 
                             // render the player's name
                             if (this.players && this.players[entity.id]) {
                                 const name = this.players[entity.id].displayName;
-                                drawText(16 - Math.floor(stringWidth(name, 10) / 2), - 15, name, 10, "black");
-                                drawText(16 - Math.floor(stringWidth(name, 10) / 2), - 16, name, 10, "white");
+                                graphics.drawText(16 - Math.floor(graphics.textWidth(name, 10) / 2), - 15, name, 10, "black");
+                                graphics.drawText(16 - Math.floor(graphics.textWidth(name, 10) / 2), - 16, name, 10, "white");
                             }
                             // flip it for changing direction
                             if (entity.faceLeft) {
-                                scale(-1, 1);
-                                translate(-32, 0);
+                                graphics.scale(-1, 1);
+                                graphics.translate(-32, 0);
                             }
 
-                            translate(16,16);
+                            graphics.translate(16,16);
                             if (Rune.gameTime() < entity.respawnedAt + 1000) {
                                 // respawn in place, do the effect
                                 let delta = 1 - (((entity.respawnedAt + 1000) - Rune.gameTime()) / 1000);
                                 if (delta > 0.5) { 
                                     delta = (delta - 0.5) / 0.5;
-                                    setAlpha(delta);
-                                    scale(5 - (delta * 4), 5 - (delta * 4));
+                                    graphics.alpha(delta);
+                                    graphics.scale(5 - (delta * 4), 5 - (delta * 4));
                                 } else {
-                                    popState();
+                                    graphics.pop();
                                     continue;
                                 }
                             }
@@ -950,35 +940,35 @@ export class GoDungeonGo implements InputEventListener {
                                     tiles = this.tilesRed;
                                 }
                             }
-                            drawTile(tiles, -16, -48, entity.type + Math.floor(entity.anim.base + sprite.frame));
-                            drawTile(tiles, -16, -16, entity.type + 16 + Math.floor(entity.anim.base + sprite.frame));
+                            graphics.drawTile(tiles, -16, -48, entity.type + Math.floor(entity.anim.base + sprite.frame));
+                            graphics.drawTile(tiles, -16, -16, entity.type + 16 + Math.floor(entity.anim.base + sprite.frame));
 
-                            popState();
+                            graphics.pop();
                         }
                     }
                 }
 
                 // render all the pick up effects
                 for (const p of this.effects) {
-                    pushState();
-                    setAlpha(Math.min(1, p.life / 30));
-                    translate(p.x, p.y);
-                    scale(1 + (5 * (1 - Math.min(1, p.life / 30))), 1 + (5 * (1 - Math.min(1, p.life / 30))));
-                    drawTile(this.tiles, -16, -16, p.tile);
-                    popState();
+                    graphics.push();
+                    graphics.alpha(Math.min(1, p.life / 30));
+                    graphics.translate(p.x, p.y);
+                    graphics.scale(1 + (5 * (1 - Math.min(1, p.life / 30))), 1 + (5 * (1 - Math.min(1, p.life / 30))));
+                    graphics.drawTile(this.tiles, -16, -16, p.tile);
+                    graphics.pop();
                 }
 
-                popState();
+                graphics.pop();
 
                 // render mini map
                 if (this.game && !this.game.atStart && !this.game.gameOver) {
-                    pushState();
+                    graphics.push();
 
                     const myEntity = this.game.entities.find(e => e.id === this.playerId)
                     if (myEntity) {
-                        scale(1.5, 1.5);
-                        fillRect(0, 0, 84, 84, "rgba(0,0,0,0.5)");
-                        translate(42, 42);
+                        graphics.scale(1.5, 1.5);
+                        graphics.fillRect(0, 0, 84, 84, "rgba(0,0,0,0.5)");
+                        graphics.translate(42, 42);
                         for (const room of this.game.rooms) {
                             if (room.discovered) {
                                 let col = "rgba(255,255,255,0.5)";
@@ -994,18 +984,18 @@ export class GoDungeonGo implements InputEventListener {
                                 if (room.enemy || room.spikes) {
                                     col = "rgba(255,50,50,0.4)";
                                 }
-                                fillRect(room.x, room.y, room.width, room.height, col);
+                                graphics.fillRect(room.x, room.y, room.width, room.height, col);
                                 if (room.connections[Direction.NORTH]) {
-                                    fillRect(room.x + (room.width / 2) - 2, room.y - 2, 4, 2, room.doors[Direction.NORTH] ? "rgb(255,255,0)" : "rgb(200,200,200)");
+                                    graphics.fillRect(room.x + (room.width / 2) - 2, room.y - 2, 4, 2, room.doors[Direction.NORTH] ? "rgb(255,255,0)" : "rgb(200,200,200)");
                                 }
                                 if (room.connections[Direction.SOUTH]) {
-                                    fillRect(room.x + (room.width / 2) - 2, room.y + room.height, 4, 2, room.doors[Direction.SOUTH] ? "rgb(255,255,0)" : "rgb(200,200,200)");
+                                    graphics.fillRect(room.x + (room.width / 2) - 2, room.y + room.height, 4, 2, room.doors[Direction.SOUTH] ? "rgb(255,255,0)" : "rgb(200,200,200)");
                                 }
                                 if (room.connections[Direction.WEST]) {
-                                    fillRect(room.x - 2, room.y + (room.height / 2) - 2, 2, 4, room.doors[Direction.WEST] ? "rgb(255,255,0)" : "rgb(200,200,200)");
+                                    graphics.fillRect(room.x - 2, room.y + (room.height / 2) - 2, 2, 4, room.doors[Direction.WEST] ? "rgb(255,255,0)" : "rgb(200,200,200)");
                                 }
                                 if (room.connections[Direction.EAST]) {
-                                    fillRect(room.x + room.width, room.y + (room.height / 2) - 2, 2, 4, room.doors[Direction.EAST] ? "rgb(255,255,0)" : "rgb(200,200,200)");
+                                    graphics.fillRect(room.x + room.width, room.y + (room.height / 2) - 2, 2, 4, room.doors[Direction.EAST] ? "rgb(255,255,0)" : "rgb(200,200,200)");
                                 }
                             }
                         }
@@ -1015,12 +1005,12 @@ export class GoDungeonGo implements InputEventListener {
                             if (room && room.discovered) {
                                 const localRoom = this.localRooms[room.id];
                                 if (localRoom) {
-                                    fillCircle(Math.floor(entity.x / 32), Math.floor(entity.y / 32), 1.5, entity === myEntity ? "white" : "black");
+                                    graphics.fillCircle(Math.floor(entity.x / 32), Math.floor(entity.y / 32), 1.5, entity === myEntity ? "white" : "black");
                                 }
                             }
                         }
                     }
-                    popState();
+                    graphics.pop();
                 }
 
                 // render score board when at start
@@ -1035,56 +1025,56 @@ export class GoDungeonGo implements InputEventListener {
                     scores.sort((a, b) => b.score - a.score);
 
                     for (const score of scores) {
-                        fillRect(0, 1 + (item * 34), screenWidth(), 32, item % 2 === 0 ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.3)");
-                        drawImage(this.avatarImages[score.playerId], 1, (item * 34) + 2, 30, 30);
-                        drawText(40, 25 + (item * 34), score.displayName, 20, "white");
-                        drawText(screenWidth() - stringWidth("" + score.score, 20) - 20, 25 + (item * 34), "" + score.score, 20, "white");
+                        graphics.fillRect(0, 1 + (item * 34), graphics.width(), 32, item % 2 === 0 ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.3)");
+                        graphics.drawImage(this.avatarImages[score.playerId], 1, (item * 34) + 2, 30, 30);
+                        graphics.drawText(40, 25 + (item * 34), score.displayName, 20, "white");
+                        graphics.drawText(graphics.width() - graphics.textWidth("" + score.score, 20) - 20, 25 + (item * 34), "" + score.score, 20, "white");
                         item++;
                     }
                 }
 
                 // draw the status message
                 if (this.game.atStart) {
-                    fillRect(0, 130, screenWidth(), 200, "rgba(0,0,0,0.5)");
+                    graphics.fillRect(0, 130, graphics.width(), 200, "rgba(0,0,0,0.5)");
 
                     if (this.game.countDown > 2) {
                         const message = "Find the Keys!";
-                        let x = (screenWidth() / 2) - 32;
+                        let x = (graphics.width() / 2) - 32;
                         if (this.game.keyCount > 2) {
                             x -= 16;
                         }
                         const keys = [9, 10, 11];
                         for (let i=0;i<this.game.keyCount;i++) {
-                            drawTile(this.tiles, Math.floor(x + (i*32)),170,keys[i]);
+                            graphics.drawTile(this.tiles, Math.floor(x + (i*32)),170,keys[i]);
                         }
-                        drawText(Math.floor(screenWidth() - stringWidth(message, 20)) / 2, 160, message, 20, "white");
+                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(message, 20)) / 2, 160, message, 20, "white");
                     } else if (this.game.countDown > 0) {
                         const message = "Get the Egg!";
-                        drawTile(this.tiles, Math.floor((screenWidth() / 2) - 16),148, 22);
-                        drawTile(this.tiles, Math.floor((screenWidth() / 2) - 16),180, 38);
-                        drawText(Math.floor(screenWidth() - stringWidth(message, 20)) / 2, 160, message, 20, "white");
+                        graphics.drawTile(this.tiles, Math.floor((graphics.width() / 2) - 16),148, 22);
+                        graphics.drawTile(this.tiles, Math.floor((graphics.width() / 2) - 16),180, 38);
+                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(message, 20)) / 2, 160, message, 20, "white");
                     } else {
                         const message = this.game.statusMessage;
-                        drawText(Math.floor(screenWidth() - stringWidth(message, 20)) / 2, 160, message, 20, "white");
+                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(message, 20)) / 2, 160, message, 20, "white");
                     }
                     
                     if (this.game.countDown > 0) {
-                        fillCircle((Math.floor(screenWidth() - stringWidth(this.game.countDown + "", 50)) / 2)+15, 265, 40, "rgba(255,50,50,0.8)");
-                        drawText(Math.floor(screenWidth() - stringWidth(this.game.countDown + "", 50)) / 2, 280, this.game.countDown + "", 50, "white");
+                        graphics.fillCircle((Math.floor(graphics.width() - graphics.textWidth(this.game.countDown + "", 50)) / 2)+15, 265, 40, "rgba(255,50,50,0.8)");
+                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(this.game.countDown + "", 50)) / 2, 280, this.game.countDown + "", 50, "white");
                     }
                 } else if (Rune.gameTime() - this.game.startRace < 1000 && Rune.gameTime() - this.game.startRace > 0) {
-                    fillRect(0, 130, screenWidth(), 100, "rgba(0,0,0,0.5)");
-                    drawText(Math.floor(screenWidth() - stringWidth("Find the Keys! First to the Egg!", 20)) / 2, 160, "Find the Keys! First to the Egg!", 20, "white");
-                    fillCircle((Math.floor(screenWidth() - stringWidth("GO!", 50)) / 2)+45, 255, 60, "rgba(50,255,50,0.8)");
-                    drawText(Math.floor(screenWidth() - stringWidth("GO!", 50)) / 2, 270, "GO!", 50, "white");
+                    graphics.fillRect(0, 130, graphics.width(), 100, "rgba(0,0,0,0.5)");
+                    graphics.drawText(Math.floor(graphics.width() - graphics.textWidth("Find the Keys! First to the Egg!", 20)) / 2, 160, "Find the Keys! First to the Egg!", 20, "white");
+                    graphics.fillCircle((Math.floor(graphics.width() - graphics.textWidth("GO!", 50)) / 2)+45, 255, 60, "rgba(50,255,50,0.8)");
+                    graphics.drawText(Math.floor(graphics.width() - graphics.textWidth("GO!", 50)) / 2, 270, "GO!", 50, "white");
                 } else if (this.game.gameOver) {
-                    fillRect(0, 130, screenWidth(), 100, "rgba(0,0,0,0.5)");
+                    graphics.fillRect(0, 130, graphics.width(), 100, "rgba(0,0,0,0.5)");
                     if (this.game.winner && this.players) {
                         const winnerName = this.players[this.game.winner].displayName ?? "";
-                        drawText(Math.floor(screenWidth() - stringWidth(winnerName, 20)) / 2, 160, winnerName, 20, "white");
-                        drawText(Math.floor(screenWidth() - stringWidth("Found the Egg!", 20)) / 2, 200, "Found the Egg!", 20, "white");
+                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(winnerName, 20)) / 2, 160, winnerName, 20, "white");
+                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth("Found the Egg!", 20)) / 2, 200, "Found the Egg!", 20, "white");
                     } else {
-                        drawText(Math.floor(screenWidth() - stringWidth("TIME OUT!", 50)) / 2, 200, "TIME OUT!", 50, "#da4e38");
+                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth("TIME OUT!", 50)) / 2, 200, "TIME OUT!", 50, "#da4e38");
                     }
                 }
                 // draw the HUD for keys and health
@@ -1098,27 +1088,27 @@ export class GoDungeonGo implements InputEventListener {
                     }
                     timeStr += seconds;
 
-                    drawText(Math.floor(screenWidth() - stringWidth(timeStr, 20)) / 2, 20, timeStr, 20, "white");
+                    graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(timeStr, 20)) / 2, 20, timeStr, 20, "white");
 
                     const myEntity = this.game.entities.find(e => e.id === this.playerId)
                     if (myEntity) {
                         // keys
                         let offset = 16;
                         if (myEntity.bronzeKey) {
-                            drawTile(this.tiles, screenWidth() - offset, 34, 47);
+                            graphics.drawTile(this.tiles, graphics.width() - offset, 34, 47);
                             offset += 16;
                         }
                         if (myEntity.silverKey) {
-                            drawTile(this.tiles, screenWidth() - offset, 34, 31);
+                            graphics.drawTile(this.tiles, graphics.width() - offset, 34, 31);
                             offset += 16;
                         }
                         if (myEntity.goldKey) {
-                            drawTile(this.tiles, screenWidth() - offset, 34, 15);
+                            graphics.drawTile(this.tiles, graphics.width() - offset, 34, 15);
                             offset += 16;
                         }
 
                         for (let i = 0; i < 3; i++) {
-                            drawTile(this.tiles, screenWidth() - 32 - (i * 32), 0, i < myEntity.health ? 7 : 8);
+                            graphics.drawTile(this.tiles, graphics.width() - 32 - (i * 32), 0, i < myEntity.health ? 7 : 8);
                         }
                     }
                 }
@@ -1130,67 +1120,64 @@ export class GoDungeonGo implements InputEventListener {
                 let width = this.logo.width;
                 let height = this.logo.height;
 
-                if (width > screenWidth()) {
+                if (width > graphics.width()) {
                     width = this.logo.width / 2;
                     height = this.logo.height / 2;
                 }
-                drawImage(this.logo, Math.floor((screenWidth() - width) / 2), 10, width, height);
+                graphics.drawImage(this.logo, Math.floor((graphics.width() - width) / 2), 10, width, height);
 
                 const selectedIndex = this.typeOptions.indexOf(this.selectedType);
                 for (const type of this.typeOptions) {
-                    const x = ((screenWidth() / 2) - 32) - (selectedIndex * 70) + (this.typeOptions.indexOf(type) * 70);
+                    const x = ((graphics.width() / 2) - 32) - (selectedIndex * 70) + (this.typeOptions.indexOf(type) * 70);
                     const y = 200;
                     let frameOffset = 0;
 
                     if (type !== this.selectedType) {
-                        setAlpha(0.25);
+                        graphics.alpha(0.25);
                     } else {
                         frameOffset = frameIndex;
                     }
-                    drawTile(this.tiles2x, x, y, type + frameOffset);
-                    drawTile(this.tiles2x, x, y + 64, type + 16 + frameOffset);
-                    setAlpha(1);
+                    graphics.drawTile(this.tiles2x, x, y, type + frameOffset);
+                    graphics.drawTile(this.tiles2x, x, y + 64, type + 16 + frameOffset);
+                    graphics.alpha(1);
                 }
 
-                drawTile(this.tiles2x, 20, 250, 54);
-                drawTile(this.tiles2x, screenWidth() - 64 - 20, 250, 70);
+                graphics.drawTile(this.tiles2x, 20, 250, 54);
+                graphics.drawTile(this.tiles2x, graphics.width() - 64 - 20, 250, 70);
 
 
-                drawTile(this.tiles2x, Math.floor(screenWidth() / 2) - 64 - 32, 350, 55);
-                drawTile(this.tiles2x, Math.floor(screenWidth() / 2) - 32, 350, 56);
-                drawTile(this.tiles2x, Math.floor(screenWidth() / 2) + 64 - 32, 350, 57);
-                drawText(Math.floor((screenWidth() - stringWidth("Play!", 20)) / 2), 388, "Play!", 20, "white");
+                graphics.drawTile(this.tiles2x, Math.floor(graphics.width() / 2) - 64 - 32, 350, 55);
+                graphics.drawTile(this.tiles2x, Math.floor(graphics.width() / 2) - 32, 350, 56);
+                graphics.drawTile(this.tiles2x, Math.floor(graphics.width() / 2) + 64 - 32, 350, 57);
+                graphics.drawText(Math.floor((graphics.width() - graphics.textWidth("Play!", 20)) / 2), 388, "Play!", 20, "white");
 
                 const name = CHAR_NAMES[this.selectedType];
-                drawText(Math.floor((screenWidth() - stringWidth(name, 20)) / 2), 230, name, 20, "white");
+                graphics.drawText(Math.floor((graphics.width() - graphics.textWidth(name, 20)) / 2), 230, name, 20, "white");
             }
 
             const versionString = "1.03";
-            drawText(screenWidth() - stringWidth(versionString, 12) - 5, screenHeight() - 5, versionString, 12, "white");
+            graphics.drawText(graphics.width() - graphics.textWidth(versionString, 12) - 5, graphics.height() - 5, versionString, 12, "white");
         }
 
         // render game controls
-        pushState();
-        setAlpha(0.2);
-        translate(0, screenHeight() - this.controlSize - this.controlVerticalPadding);
+        graphics.push();
+        graphics.alpha(0.2);
+        graphics.translate(0, graphics.height() - this.controlSize - this.controlVerticalPadding);
 
-        fillCircle(screenWidth() - (this.controlSize / 2) - this.controlHorizontalPadding, +this.controlSize / 2, this.controlSize / 2, "white");
-        setAlpha(0.8);
+        graphics.fillCircle(graphics.width() - (this.controlSize / 2) - this.controlHorizontalPadding, +this.controlSize / 2, this.controlSize / 2, "white");
+        graphics.alpha(0.8);
         if (this.game) {
             const myEntity = this.game.entities.find(e => e.id === this.playerId);
             if (myEntity) {
                 const offset = (this.controlSize - 32) / 2;
                 if (myEntity.item === "speed") {
-                    drawTile(this.tiles, screenWidth() - this.controlSize - this.controlHorizontalPadding + offset, offset, 28);
+                    graphics.drawTile(this.tiles, graphics.width() - this.controlSize - this.controlHorizontalPadding + offset, offset, 28);
                 }
                 if (myEntity.item === "health") {
-                    drawTile(this.tiles, screenWidth() - this.controlSize - this.controlHorizontalPadding + offset, offset, 27);
+                    graphics.drawTile(this.tiles, graphics.width() - this.controlSize - this.controlHorizontalPadding + offset, offset, 27);
                 }
             }
         }
-        popState();
-
-        // continue the loop on the next screen update
-        requestAnimationFrame(() => { this.loop() });
+        graphics.pop();
     }
 }
