@@ -19,6 +19,7 @@ import { Interpolator, Players } from "rune-games-sdk";
 import nipplejs, { JoystickManager } from 'nipplejs';
 import { Game, Sound, TileSet, graphics, sound } from "togl";
 import { intersects } from "./util";
+import { GameImage } from "togl/dist/graphics";
 
 
 // a predictable random used to generate the random
@@ -222,9 +223,9 @@ export class GoDungeonGo implements Game {
     // The list of players that joined the Rune room
     players?: Players;
     // The images for the avatars provided by Rune
-    avatarImages: Record<string, HTMLImageElement> = {}
+    avatarImages: Record<string, GameImage> = {}
     // The game logo 
-    logo: HTMLImageElement;
+    logo: GameImage;
 
     // the character the player has selected
     selectedType: EntityType = EntityType.PINK_KNIGHT;
