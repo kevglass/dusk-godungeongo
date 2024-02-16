@@ -342,60 +342,56 @@ Rune.initLogic({
       }
     }
 
-    // move all the non-monster entities in a quarter step at a time
-    // to check for collision along the way
-    for (let i = 0; i < 4; i++) {
-      for (const entity of context.game.entities.filter(e => e.type !== EntityType.MONSTER)) {
-        updateEntity(Rune.gameTime(), context.game, entity, 0.25);
-        const room = findRoomAt(context.game, entity.x, entity.y);
+    for (const entity of context.game.entities.filter(e => e.type !== EntityType.MONSTER)) {
+      updateEntity(Rune.gameTime(), context.game, entity, 1);
+      const room = findRoomAt(context.game, entity.x, entity.y);
 
-        if (room && entity.type !== EntityType.MONSTER) {
-          room.discovered = true;
-          if (room.item) {
-            if (closeToCenter(room, entity.x, entity.y)) {
-              // intersect with the item in the room
-              if (room.item === "bronze" && !entity.bronzeKey) {
-                entity.bronzeKey = true;
-                context.game.scores[entity.id] += 1;
-                context.game.events.push({ type: GameEventType.GOT_BRONZE, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
-              }
-              if (room.item === "silver" && !entity.silverKey) {
-                entity.silverKey = true;
-                context.game.scores[entity.id] += 1;
-                context.game.events.push({ type: GameEventType.GOT_SILVER, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
-              }
-              if (room.item === "gold" && !entity.goldKey) {
-                entity.goldKey = true;
-                context.game.scores[entity.id] += 1;
-                context.game.events.push({ type: GameEventType.GOT_GOLD, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
-              }
-              if (room.item === "health") {
-                if (!entity.item) {
-                  entity.item = "health";
-                  room.item = undefined;
-                  context.game.events.push({ type: GameEventType.GOT_HEALTH, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
-                }
-              }
-              if (room.item === "speed") {
-                if (!entity.item) {
-                  entity.item = "speed";
-                  room.item = undefined;
-                  context.game.events.push({ type: GameEventType.GOT_SPEED, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
-                }
-              }
-              if (room.item === "treasure") {
-                context.game.scores[entity.id] += 2;
+      if (room && entity.type !== EntityType.MONSTER) {
+        room.discovered = true;
+        if (room.item) {
+          if (closeToCenter(room, entity.x, entity.y)) {
+            // intersect with the item in the room
+            if (room.item === "bronze" && !entity.bronzeKey) {
+              entity.bronzeKey = true;
+              context.game.scores[entity.id] += 1;
+              context.game.events.push({ type: GameEventType.GOT_BRONZE, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
+            }
+            if (room.item === "silver" && !entity.silverKey) {
+              entity.silverKey = true;
+              context.game.scores[entity.id] += 1;
+              context.game.events.push({ type: GameEventType.GOT_SILVER, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
+            }
+            if (room.item === "gold" && !entity.goldKey) {
+              entity.goldKey = true;
+              context.game.scores[entity.id] += 1;
+              context.game.events.push({ type: GameEventType.GOT_GOLD, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
+            }
+            if (room.item === "health") {
+              if (!entity.item) {
+                entity.item = "health";
                 room.item = undefined;
-                context.game.events.push({ type: GameEventType.GOT_TREASURE, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
+                context.game.events.push({ type: GameEventType.GOT_HEALTH, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
               }
+            }
+            if (room.item === "speed") {
+              if (!entity.item) {
+                entity.item = "speed";
+                room.item = undefined;
+                context.game.events.push({ type: GameEventType.GOT_SPEED, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
+              }
+            }
+            if (room.item === "treasure") {
+              context.game.scores[entity.id] += 2;
+              room.item = undefined;
+              context.game.events.push({ type: GameEventType.GOT_TREASURE, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
+            }
 
-              if (room.item === "egg" && !context.game.winner) {
-                context.game.scores[entity.id] += 7;
-                context.game.winner = entity.id;
-                context.game.gameOver = true;
-                context.game.gameOverTime = Rune.gameTime();
-                context.game.events.push({ type: GameEventType.WIN });
-              }
+            if (room.item === "egg" && !context.game.winner) {
+              context.game.scores[entity.id] += 7;
+              context.game.winner = entity.id;
+              context.game.gameOver = true;
+              context.game.gameOverTime = Rune.gameTime();
+              context.game.events.push({ type: GameEventType.WIN });
             }
           }
         }
