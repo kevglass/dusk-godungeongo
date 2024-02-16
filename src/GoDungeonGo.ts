@@ -813,6 +813,8 @@ export class GoDungeonGo implements Game {
     }
 
     render(): void {
+        graphics.fillRect(0,0,graphics.width(), graphics.height(), "black");
+
         // calculate the controls size based on the screen size
         this.controlSize = graphics.width() / 5;
         this.controlHorizontalPadding = this.controlSize / 1.5
