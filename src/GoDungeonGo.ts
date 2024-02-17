@@ -19,7 +19,8 @@ import { Interpolator, Players } from "rune-games-sdk";
 import nipplejs, { JoystickManager } from 'nipplejs';
 import { Game, Sound, TileSet, graphics, sound } from "togl";
 import { intersects } from "./util";
-import { GameImage } from "togl/dist/graphics";
+import { GameImage, RendererType } from "togl";
+import { GameFont } from "togl/dist/graphics";
 
 
 // a predictable random used to generate the random
@@ -257,6 +258,12 @@ export class GoDungeonGo implements Game {
     // sound for when a player drinks a speed potion
     sfxSpeedUp: Sound;
 
+    font10Black: GameFont;
+    font10White: GameFont;
+    font50Red: GameFont;
+    font20White: GameFont;
+    font50White: GameFont;
+
     // joystick
     joystick?: JoystickManager;
 
@@ -271,6 +278,14 @@ export class GoDungeonGo implements Game {
 
     constructor() {
         // load all the resources
+        graphics.init(RendererType.WEBGL, true);
+
+        this.font10Black = graphics.generateFont(10, "black");
+        this.font10White = graphics.generateFont(10, "white");
+        this.font50Red = graphics.generateFont(50,  "#da4e38", "TIMEOUT!");
+        this.font50White = graphics.generateFont(50,  "white");
+        this.font20White = graphics.generateFont(20, "white");
+
         this.tiles = graphics.loadTileSet(gfxTilesUrl, 32, 32);
         this.tilesRed = graphics.loadTileSet(gfxTilesRedUrl, 32, 32);
         this.tiles2x = graphics.loadTileSet(gfxTiles2xUrl, 64, 64);
@@ -902,7 +917,8 @@ export class GoDungeonGo implements Game {
                                     }
                                     const scale = remaining / PUFF_TIME;
                                     graphics.alpha(scale);
-                                    graphics.halfCircle(puff.x - puff.offset, puff.y - puff.offset, puff.size, entity.speed > 10 ? puff.speedCol : puff.col);
+                                    // TODO: Sort out particle here
+                                    //graphics.halfCircle(puff.x - puff.offset, puff.y - puff.offset, puff.size, entity.speed > 10 ? puff.speedCol : puff.col);
                                     graphics.alpha(1);
                                 }
                             }
@@ -913,8 +929,8 @@ export class GoDungeonGo implements Game {
                             // render the player's name
                             if (this.players && this.players[entity.id]) {
                                 const name = this.players[entity.id].displayName;
-                                graphics.drawText(16 - Math.floor(graphics.textWidth(name, 10) / 2), - 15, name, 10, "black");
-                                graphics.drawText(16 - Math.floor(graphics.textWidth(name, 10) / 2), - 16, name, 10, "white");
+                                graphics.drawText(16 - Math.floor(graphics.textWidth(name, this.font10Black) / 2), - 15, name, this.font10Black);
+                                graphics.drawText(16 - Math.floor(graphics.textWidth(name, this.font10White) / 2), - 16, name, this.font10White);
                             }
                             // flip it for changing direction
                             if (entity.faceLeft) {
@@ -1008,7 +1024,8 @@ export class GoDungeonGo implements Game {
                             if (room && room.discovered) {
                                 const localRoom = this.localRooms[room.id];
                                 if (localRoom) {
-                                    graphics.fillCircle(Math.floor(entity.x / 32), Math.floor(entity.y / 32), 1.5, entity === myEntity ? "white" : "black");
+                                    // TODO - Use a sprite here
+                                    // graphics.fillCircle(Math.floor(entity.x / 32), Math.floor(entity.y / 32), 1.5, entity === myEntity ? "white" : "black");
                                 }
                             }
                         }
@@ -1030,8 +1047,8 @@ export class GoDungeonGo implements Game {
                     for (const score of scores) {
                         graphics.fillRect(0, 1 + (item * 34), graphics.width(), 32, item % 2 === 0 ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.3)");
                         graphics.drawImage(this.avatarImages[score.playerId], 1, (item * 34) + 2, 30, 30);
-                        graphics.drawText(40, 25 + (item * 34), score.displayName, 20, "white");
-                        graphics.drawText(graphics.width() - graphics.textWidth("" + score.score, 20) - 20, 25 + (item * 34), "" + score.score, 20, "white");
+                        graphics.drawText(40, 25 + (item * 34), score.displayName, this.font20White);
+                        graphics.drawText(graphics.width() - graphics.textWidth("" + score.score, this.font20White) - 20, 25 + (item * 34), "" + score.score, this.font20White);
                         item++;
                     }
                 }
@@ -1050,34 +1067,36 @@ export class GoDungeonGo implements Game {
                         for (let i=0;i<this.game.keyCount;i++) {
                             graphics.drawTile(this.tiles, Math.floor(x + (i*32)),170,keys[i]);
                         }
-                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(message, 20)) / 2, 160, message, 20, "white");
+                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(message, this.font20White)) / 2, 160, message, this.font20White);
                     } else if (this.game.countDown > 0) {
                         const message = "Get the Egg!";
                         graphics.drawTile(this.tiles, Math.floor((graphics.width() / 2) - 16),148, 22);
                         graphics.drawTile(this.tiles, Math.floor((graphics.width() / 2) - 16),180, 38);
-                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(message, 20)) / 2, 160, message, 20, "white");
+                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(message, this.font20White)) / 2, 160, message, this.font20White);
                     } else {
                         const message = this.game.statusMessage;
-                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(message, 20)) / 2, 160, message, 20, "white");
+                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(message, this.font20White)) / 2, 160, message, this.font20White);
                     }
                     
                     if (this.game.countDown > 0) {
-                        graphics.fillCircle((Math.floor(graphics.width() - graphics.textWidth(this.game.countDown + "", 50)) / 2)+15, 265, 40, "rgba(255,50,50,0.8)");
-                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(this.game.countDown + "", 50)) / 2, 280, this.game.countDown + "", 50, "white");
+                        // TODO use sprite here
+                        // graphics.fillCircle((Math.floor(graphics.width() - graphics.textWidth(this.game.countDown + "", 50)) / 2)+15, 265, 40, "rgba(255,50,50,0.8)");
+                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(this.game.countDown + "", this.font50White)) / 2, 280, this.game.countDown + "", this.font50White);
                     }
                 } else if (Rune.gameTime() - this.game.startRace < 1000 && Rune.gameTime() - this.game.startRace > 0) {
                     graphics.fillRect(0, 130, graphics.width(), 100, "rgba(0,0,0,0.5)");
-                    graphics.drawText(Math.floor(graphics.width() - graphics.textWidth("Find the Keys! First to the Egg!", 20)) / 2, 160, "Find the Keys! First to the Egg!", 20, "white");
-                    graphics.fillCircle((Math.floor(graphics.width() - graphics.textWidth("GO!", 50)) / 2)+45, 255, 60, "rgba(50,255,50,0.8)");
-                    graphics.drawText(Math.floor(graphics.width() - graphics.textWidth("GO!", 50)) / 2, 270, "GO!", 50, "white");
+                    graphics.drawText(Math.floor(graphics.width() - graphics.textWidth("Find the Keys! First to the Egg!", this.font20White)) / 2, 160, "Find the Keys! First to the Egg!", this.font20White);
+                    // TODO use a sprite
+                    // graphics.fillCircle((Math.floor(graphics.width() - graphics.textWidth("GO!", 50)) / 2)+45, 255, 60, "rgba(50,255,50,0.8)");
+                    graphics.drawText(Math.floor(graphics.width() - graphics.textWidth("GO!", this.font50White)) / 2, 270, "GO!", this.font50White);
                 } else if (this.game.gameOver) {
                     graphics.fillRect(0, 130, graphics.width(), 100, "rgba(0,0,0,0.5)");
                     if (this.game.winner && this.players) {
                         const winnerName = this.players[this.game.winner].displayName ?? "";
-                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(winnerName, 20)) / 2, 160, winnerName, 20, "white");
-                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth("Found the Egg!", 20)) / 2, 200, "Found the Egg!", 20, "white");
+                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(winnerName, this.font50White)) / 2, 160, winnerName, this.font50White);
+                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth("Found the Egg!", this.font20White)) / 2, 200, "Found the Egg!", this.font20White);
                     } else {
-                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth("TIME OUT!", 50)) / 2, 200, "TIME OUT!", 50, "#da4e38");
+                        graphics.drawText(Math.floor(graphics.width() - graphics.textWidth("TIME OUT!", this.font50Red)) / 2, 200, "TIME OUT!", this.font50Red);
                     }
                 }
                 // draw the HUD for keys and health
@@ -1091,7 +1110,7 @@ export class GoDungeonGo implements Game {
                     }
                     timeStr += seconds;
 
-                    graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(timeStr, 20)) / 2, 20, timeStr, 20, "white");
+                    graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(timeStr, this.font20White)) / 2, 20, timeStr, this.font20White);
 
                     const myEntity = this.game.entities.find(e => e.id === this.playerId)
                     if (myEntity) {
@@ -1152,14 +1171,14 @@ export class GoDungeonGo implements Game {
                 graphics.drawTile(this.tiles2x, Math.floor(graphics.width() / 2) - 64 - 32, 350, 55);
                 graphics.drawTile(this.tiles2x, Math.floor(graphics.width() / 2) - 32, 350, 56);
                 graphics.drawTile(this.tiles2x, Math.floor(graphics.width() / 2) + 64 - 32, 350, 57);
-                graphics.drawText(Math.floor((graphics.width() - graphics.textWidth("Play!", 20)) / 2), 388, "Play!", 20, "white");
+                graphics.drawText(Math.floor((graphics.width() - graphics.textWidth("Play!", this.font20White)) / 2), 388, "Play!", this.font20White);
 
                 const name = CHAR_NAMES[this.selectedType];
-                graphics.drawText(Math.floor((graphics.width() - graphics.textWidth(name, 20)) / 2), 230, name, 20, "white");
+                graphics.drawText(Math.floor((graphics.width() - graphics.textWidth(name, this.font20White)) / 2), 230, name,this.font20White);
             }
 
             const versionString = "1.03";
-            graphics.drawText(graphics.width() - graphics.textWidth(versionString, 12) - 5, graphics.height() - 5, versionString, 12, "white");
+            graphics.drawText(graphics.width() - graphics.textWidth(versionString, this.font10White) - 5, graphics.height() - 5, versionString, this.font10White);
         }
 
         // render game controls
@@ -1167,7 +1186,8 @@ export class GoDungeonGo implements Game {
         graphics.alpha(0.2);
         graphics.translate(0, graphics.height() - this.controlSize - this.controlVerticalPadding);
 
-        graphics.fillCircle(graphics.width() - (this.controlSize / 2) - this.controlHorizontalPadding, +this.controlSize / 2, this.controlSize / 2, "white");
+        // TODO use sprite
+        // graphics.fillCircle(graphics.width() - (this.controlSize / 2) - this.controlHorizontalPadding, +this.controlSize / 2, this.controlSize / 2, "white");
         graphics.alpha(0.8);
         if (this.game) {
             const myEntity = this.game.entities.find(e => e.id === this.playerId);
@@ -1183,4 +1203,5 @@ export class GoDungeonGo implements Game {
         }
         graphics.pop();
     }
+
 }
