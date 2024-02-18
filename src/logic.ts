@@ -33,6 +33,10 @@ export interface GameState {
   entities: Entity[];
   // The rooms that build up our dungeon
   rooms: Room[];
+  // Room map
+  roomMap: Record<string, number>;
+  // Room map
+  roomsMap: Record<string, number[]>;
   // The room that players start in
   startRoom: number;
   // The scores keyed on Player ID
@@ -98,6 +102,8 @@ export enum GameEventType {
   SPEED_UP = 13,
   // A player used a heal potion
   HEAL_UP = 14,
+  // a room was discovered by any player
+  DISCOVER = 15
 }
 
 // Simple game event to let the renderer know when game loop events
@@ -180,6 +186,8 @@ function startGame(state: GameState) {
   const existingPlayers = state.entities.filter(e => e.type !== EntityType.MONSTER);
   state.entities = [];
   state.rooms = [];
+  state.roomsMap = {};
+  state.roomMap = {};
   state.startRoom = 0;
   state.startRace = 0;
   state.countDown = -1;
@@ -216,6 +224,8 @@ Rune.initLogic({
     const initialState = {
       entities: [],
       rooms: [],
+      roomMap: {},
+      roomsMap: {},
       startRoom: 0,
       scores: {},
       atStart: true,
@@ -342,12 +352,16 @@ Rune.initLogic({
       }
     }
 
+    let fireDiscovery = true;
     for (const entity of context.game.entities.filter(e => e.type !== EntityType.MONSTER)) {
       updateEntity(Rune.gameTime(), context.game, entity, 1);
       const room = findRoomAt(context.game, entity.x, entity.y);
 
-      if (room && entity.type !== EntityType.MONSTER) {
-        room.discovered = true;
+      if (room) {
+        if (!room.discovered) {
+          room.discovered = true;
+          fireDiscovery = true;
+        }
         if (room.item) {
           if (closeToCenter(room, entity.x, entity.y)) {
             // intersect with the item in the room
@@ -398,8 +412,12 @@ Rune.initLogic({
       }
     }
 
-    // update all the monster entities with a flat 1 step update since they
-    // don't do collision
+    if (fireDiscovery) {
+      context.game.events.push({ type: GameEventType.DISCOVER });
+    }
+
+    // // update all the monster entities with a flat 1 step update since they
+    // // don't do collision
     for (const entity of context.game.entities.filter(e => e.type === EntityType.MONSTER)) {
       updateEntity(Rune.gameTime(), context.game, entity, 1);
     }

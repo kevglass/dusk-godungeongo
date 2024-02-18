@@ -273,12 +273,22 @@ function fillDepth(rooms: Room[], room: Room, depth: number) {
 
 // Find all the rooms at the specified pixel location
 export function findAllRoomsAt(state: GameState, x: number, y: number): Room[] {
-    return state.rooms.filter(r => inRoomSpace(r, x, y));
+    let rooms = state.roomsMap[x + (y * 10000)];
+    if (!rooms) {
+        rooms = state.roomsMap[x+(y*10000)] = state.rooms.filter(r => inRoomSpace(r, x, y)).map(r => state.rooms.indexOf(r));
+    }
+    return rooms.map(i => state.rooms[i]);
 }
 
 // Find any room at the specified pixel location
 export function findRoomAt(state: GameState, x: number, y: number): Room | undefined {
-    return state.rooms.find(r => inRoomSpace(r, x, y));
+    let roomIndex = state.roomMap[x + (y * 10000)];
+    if (!roomIndex) {
+        const targetRoom = state.rooms.find(r => inRoomSpace(r, x, y));
+        roomIndex = state.roomMap[x+(y*10000)] = targetRoom ? state.rooms.indexOf(targetRoom) : -1;
+    }
+
+    return state.rooms[roomIndex];
 }
 
 // Check if the location given is close to the centre of the room

@@ -131,23 +131,9 @@ export function updateEntity(time: number, state: GameState, entity: Entity, ste
         if (opponent) {
             const dx = opponent.x - entity.x;
             const dy = opponent.y - entity.y;
-            const len = Math.sqrt((dx*dx)+(dy*dy));
-            if (len !== 0) {
-                entity.x += (dx / len) * monsterSpeed;
-                entity.y += (dy / len) * monsterSpeed;
-                if (dx < 0) {
-                    entity.faceLeft = false;
-                } else if (dx > 0) {
-                    entity.faceLeft = true;
-                }
-            }
-        } else {
-            // otherwise use the centre of the room as a target
-            if (room) {
-                const dx = ((room.x + (room.width/2)) * 32) - entity.x;
-                const dy = ((room.y + (room.height/2)) * 32) - entity.y;
-                const len = Math.sqrt((dx*dx)+(dy*dy));
-                if (len !== 0) {
+            if (Math.abs(dx) + Math.abs(dy) > 5) {
+                const len = Math.sqrt((dx * dx) + (dy * dy));
+                if (len > 0) {
                     entity.x += (dx / len) * monsterSpeed;
                     entity.y += (dy / len) * monsterSpeed;
                     if (dx < 0) {
@@ -156,8 +142,8 @@ export function updateEntity(time: number, state: GameState, entity: Entity, ste
                         entity.faceLeft = true;
                     }
                 }
-            } 
-        }
+            }
+        } 
     } else {
         // if its a player we need to apply the current state of the player controls (if
         // they're pressing any)
@@ -191,7 +177,7 @@ export function updateEntity(time: number, state: GameState, entity: Entity, ste
                 entity.y += speed;
             }
             room = findRoomAt(state, entity.x, entity.y);
-            if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, entity.goldKey && entity.silverKey &&  (state.keyCount < 3 || entity.bronzeKey))) {
+            if (!room || blockedLocationInRoom(state.atStart, room, entity.x, entity.y, entity.goldKey && entity.silverKey && (state.keyCount < 3 || entity.bronzeKey))) {
                 entity.y = oldY;
             }
         }

@@ -14,13 +14,13 @@ import sfxHealUp from "./assets/healup.mp3";
 import sfxSpeedUp from "./assets/speedup.mp3";
 
 import { Controls, Entity, EntityType, RUN } from "./entity";
-import { Direction, Room, findAllRoomsAt, findRoomAt } from "./room";
+import { Direction, Room, inRoomSpace } from "./room";
 import { Interpolator, Players } from "rune-games-sdk";
 import nipplejs, { JoystickManager } from 'nipplejs';
 import { Game, Sound, TileSet, graphics, sound } from "togl";
 import { intersects } from "./util";
 import { GameImage, RendererType } from "togl";
-import { GameFont } from "togl/dist/graphics";
+import { GameFont, Offscreen } from "togl";
 
 
 // a predictable random used to generate the random
@@ -163,6 +163,14 @@ export class LocalRoom {
     discovered = false;
     // The fade in alpha value for the room appearing
     fade = 0;
+    // offscreen where the image of the room is cached
+    offscreen?: Offscreen;
+    // item that was renderered
+    item?: string;
+    // has all keys
+    hasAllKeys = false;
+    // was rendered at start
+    atStart: boolean | undefined;
 }
 
 // Effect of a picking something up. Grow the sprite and fade
@@ -276,14 +284,23 @@ export class GoDungeonGo implements Game {
     };
     lastActionedControls = { ...this.controls };
 
+    frameCount = 0;
+
+    roomMap: Record<string, number> = {};
+    roomsMap: Record<string, number[]> = {};
+
+    lastControlsSent = 0;
+    roomsDrawn = 0;
+    minimap?: Offscreen;
+
     constructor() {
         // load all the resources
         graphics.init(RendererType.WEBGL, true);
 
         this.font10Black = graphics.generateFont(10, "black");
         this.font10White = graphics.generateFont(10, "white");
-        this.font50Red = graphics.generateFont(50,  "#da4e38", "TIMEOUT!");
-        this.font50White = graphics.generateFont(50,  "white");
+        this.font50Red = graphics.generateFont(50, "#da4e38", "TIMEOUT!");
+        this.font50White = graphics.generateFont(50, "white");
         this.font20White = graphics.generateFont(20, "white");
 
         this.tiles = graphics.loadTileSet(gfxTilesUrl, 32, 32);
@@ -341,6 +358,26 @@ export class GoDungeonGo implements Game {
         });
     }
 
+    // Find all the rooms at the specified pixel location
+    findAllRoomsAt(state: GameState, x: number, y: number): Room[] {
+        let rooms = this.roomsMap[x + (y * 10000)];
+        if (!rooms) {
+            rooms = this.roomsMap[x + (y * 10000)] = state.rooms.filter(r => inRoomSpace(r, x, y)).map(r => state.rooms.indexOf(r));
+        }
+        return rooms.map(i => state.rooms[i]);
+    }
+
+    // Find any room at the specified pixel location
+    findRoomAt(state: GameState, x: number, y: number): Room | undefined {
+        let roomIndex = this.roomMap[x + (y * 10000)];
+        if (!roomIndex) {
+            const targetRoom = state.rooms.find(r => inRoomSpace(r, x, y));
+            roomIndex = this.roomMap[x + (y * 10000)] = targetRoom ? state.rooms.indexOf(targetRoom) : -1;
+        }
+
+        return state.rooms[roomIndex];
+    }
+
     // start the game
     start(): void {
         // register ourselves as the input listener so
@@ -358,6 +395,8 @@ export class GoDungeonGo implements Game {
                 this.entitySprites = {};
                 this.localRooms = {};
                 this.effects = [];
+                this.roomMap = {};
+                this.roomsMap = {};
             }
             // if we got hurt play the SFX
             if (event.type === GameEventType.HURT) {
@@ -373,6 +412,9 @@ export class GoDungeonGo implements Game {
                 if (event.who) {
                     delete this.entitySprites[event.who];
                 }
+            }
+            if (event.type === GameEventType.DISCOVER) {
+                this.updateMinimap();
             }
             // play the win SFX
             if (event.type === GameEventType.WIN) {
@@ -520,15 +562,16 @@ export class GoDungeonGo implements Game {
         // the data model
         setTimeout(() => {
             this.updateControls();
-        }, 10);
+        }, 1);
     }
 
     updateControls(): void {
-        if (this.game) {
+        if (this.game && Date.now() - this.lastControlsSent > 1000 / 8) {
             if ((this.lastActionedControls.left !== this.controls.left) || (this.lastActionedControls.right !== this.controls.right) ||
                 (this.lastActionedControls.up !== this.controls.up) || (this.lastActionedControls.down !== this.controls.down)) {
                 Rune.actions.applyControls({ ...this.controls });
                 this.lastActionedControls = { ...this.controls };
+                this.lastControlsSent = Date.now();
             }
         }
     }
@@ -636,200 +679,262 @@ export class GoDungeonGo implements Game {
             myEntity = this.game.entities.find(e => e.id === this.playerId)
         }
 
-        graphics.push();
-        graphics.translate(room.x * 32, room.y * 32);
-
-        // render the floor
-        for (let x = 0; x < room.width; x++) {
-            for (let y = 0; y < room.height; y++) {
-                graphics.drawTile(this.tiles, x * 32, y * 32, FLOOR_MAP[Math.abs((x * y) % FLOOR_MAP.length)]);
-            }
-        }
-
-        // render top/bottom walls
-        for (let x = 1; x < room.width - 1; x++) {
-            graphics.drawTile(this.tiles, x * 32, -32, 0);
-            graphics.drawTile(this.tiles, x * 32, 0, WALL_MAP[Math.abs((x * room.y) % WALL_MAP.length)]);
-            graphics.drawTile(this.tiles, x * 32, (room.height * 32) - 32, 0);
-            graphics.drawTile(this.tiles, x * 32, (room.height * 32), 16);
-        }
-
-        // render left/right walls
-        for (let y = 1; y < room.height - 1; y++) {
-            graphics.drawTile(this.tiles, 0, y * 32, 129);
-            graphics.drawTile(this.tiles, (room.width * 32) - 32, y * 32, 128);
-        }
-
-        // corners
-        graphics.drawTile(this.tiles, 0, -32, 114);
-        graphics.drawTile(this.tiles, 0, 0, 130);
-        graphics.drawTile(this.tiles, (room.width * 32) - 32, -32, 115);
-        graphics.drawTile(this.tiles, (room.width * 32) - 32, 0, 131);
-        graphics.drawTile(this.tiles, 0, (room.height * 32) - 32, 146);
-        graphics.drawTile(this.tiles, 0, (room.height * 32), 162);
-        graphics.drawTile(this.tiles, (room.width * 32) - 32, (room.height * 32) - 32, 147);
-        graphics.drawTile(this.tiles, (room.width * 32) - 32, (room.height * 32), 163);
-
-        const halfX = Math.floor(room.width / 2) - 1;
-        const halfY = Math.floor(room.height / 2) - 1;
-
+        const localRoom = this.localRooms[room.id];
         const hasAllKeys = (myEntity?.bronzeKey || (this.game?.keyCount ?? 0 < 3)) && myEntity?.goldKey && myEntity?.silverKey
 
-        let base = 0;
-        if ((this.game?.keyCount ?? 0) < 3) {
-            base = 196;
-        }
-
-        // north door
-        if (room.connections[Direction.NORTH]) {
-            graphics.drawTile(this.tiles, halfX * 32, 0, 64);
-            graphics.drawTile(this.tiles, (halfX + 1) * 32, 0, 64);
-            graphics.drawTile(this.tiles, halfX * 32, -32, 64);
-            graphics.drawTile(this.tiles, (halfX + 1) * 32, -32, 64);
-            graphics.drawTile(this.tiles, (halfX - 1) * 32, -32, 128);
-            graphics.drawTile(this.tiles, (halfX + 2) * 32, -32, 129);
-
-            if (this.game?.atStart) {
-                graphics.drawTile(this.tiles, halfX * 32, -32, 45);
-                graphics.drawTile(this.tiles, (halfX + 1) * 32, -32, 45);
+        if (!localRoom.offscreen || localRoom.item !== room.item || localRoom.hasAllKeys !== hasAllKeys ? true : false ||
+            localRoom.atStart !== this.game?.atStart) {
+            localRoom.item = room.item;
+            localRoom.atStart = this.game?.atStart;
+            localRoom.hasAllKeys = hasAllKeys ? true : false;
+            if (!localRoom.offscreen) {
+                localRoom.offscreen = graphics.createOffscreen((room.width + 4) * 32, (room.height + 4) * 32);
             }
-            if (room.doors[Direction.NORTH]) {
-                if (hasAllKeys) {
-                    graphics.alpha(0.5);
+            graphics.drawToOffscreen(localRoom.offscreen);
+            graphics.clearRect(0, 0, localRoom.offscreen.width, localRoom.offscreen.height);
+            graphics.translate(64, 64);
+
+            // render the floor
+            for (let x = 0; x < room.width; x++) {
+                for (let y = 0; y < room.height; y++) {
+                    graphics.drawTile(this.tiles, x * 32, y * 32, FLOOR_MAP[Math.abs((x * y) % FLOOR_MAP.length)]);
                 }
-                graphics.drawTile(this.tiles, halfX * 32, -32, base+12);
-                graphics.drawTile(this.tiles, (halfX + 1) * 32, -32, base+13);
-                graphics.alpha(1);
             }
-        }
-        // south door
-        if (room.connections[Direction.SOUTH]) {
-            graphics.drawTile(this.tiles, halfX * 32, (room.height * 32) - 32, 64);
-            graphics.drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32) - 32, 64);
-            graphics.drawTile(this.tiles, halfX * 32, (room.height * 32), 64);
-            graphics.drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32), 64);
-            graphics.drawTile(this.tiles, (halfX - 1) * 32, (room.height * 32), 128);
-            graphics.drawTile(this.tiles, (halfX + 2) * 32, (room.height * 32), 129);
 
-            if (this.game?.atStart) {
-                graphics.drawTile(this.tiles, halfX * 32, (room.height * 32), 45);
-                graphics.drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32), 45);
+            // render top/bottom walls
+            for (let x = 1; x < room.width - 1; x++) {
+                graphics.drawTile(this.tiles, x * 32, -32, 0);
+                graphics.drawTile(this.tiles, x * 32, 0, WALL_MAP[Math.abs((x * room.y) % WALL_MAP.length)]);
+                graphics.drawTile(this.tiles, x * 32, (room.height * 32) - 32, 0);
+                graphics.drawTile(this.tiles, x * 32, (room.height * 32), 16);
             }
-            if (room.doors[Direction.SOUTH]) {
-                if (hasAllKeys) {
-                    graphics.alpha(0.5);
+
+            // render left/right walls
+            for (let y = 1; y < room.height - 1; y++) {
+                graphics.drawTile(this.tiles, 0, y * 32, 129);
+                graphics.drawTile(this.tiles, (room.width * 32) - 32, y * 32, 128);
+            }
+
+            // corners
+            graphics.drawTile(this.tiles, 0, -32, 114);
+            graphics.drawTile(this.tiles, 0, 0, 130);
+            graphics.drawTile(this.tiles, (room.width * 32) - 32, -32, 115);
+            graphics.drawTile(this.tiles, (room.width * 32) - 32, 0, 131);
+            graphics.drawTile(this.tiles, 0, (room.height * 32) - 32, 146);
+            graphics.drawTile(this.tiles, 0, (room.height * 32), 162);
+            graphics.drawTile(this.tiles, (room.width * 32) - 32, (room.height * 32) - 32, 147);
+            graphics.drawTile(this.tiles, (room.width * 32) - 32, (room.height * 32), 163);
+
+            const halfX = Math.floor(room.width / 2) - 1;
+            const halfY = Math.floor(room.height / 2) - 1;
+
+            let base = 0;
+            if ((this.game?.keyCount ?? 0) < 3) {
+                base = 196;
+            }
+
+            // north door
+            if (room.connections[Direction.NORTH]) {
+                graphics.drawTile(this.tiles, halfX * 32, 0, 64);
+                graphics.drawTile(this.tiles, (halfX + 1) * 32, 0, 64);
+                graphics.drawTile(this.tiles, halfX * 32, -32, 64);
+                graphics.drawTile(this.tiles, (halfX + 1) * 32, -32, 64);
+                graphics.drawTile(this.tiles, (halfX - 1) * 32, -32, 128);
+                graphics.drawTile(this.tiles, (halfX + 2) * 32, -32, 129);
+
+                if (this.game?.atStart) {
+                    graphics.drawTile(this.tiles, halfX * 32, -32, 45);
+                    graphics.drawTile(this.tiles, (halfX + 1) * 32, -32, 45);
                 }
-                graphics.drawTile(this.tiles, halfX * 32, (room.height * 32) + 32, base+12);
-                graphics.drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32) + 32, base+13);
-                graphics.alpha(1);
-            }
-        }
-        // west door
-        if (room.connections[Direction.WEST]) {
-            graphics.drawTile(this.tiles, 0, (halfY * 32), 64);
-            graphics.drawTile(this.tiles, 0, (halfY * 32) + 32, 64);
-            graphics.drawTile(this.tiles, -32, (halfY * 32), 64);
-            graphics.drawTile(this.tiles, -32, (halfY * 32) + 32, 64);
-            graphics.drawTile(this.tiles, -32, (halfY * 32) - 32, 16);
-            graphics.drawTile(this.tiles, 0, (halfY * 32) - 32, 145);
-            graphics.drawTile(this.tiles, -32, (halfY * 32) - 64, 0);
-            graphics.drawTile(this.tiles, -32, (halfY * 32) + 38, 0);
-            graphics.drawTile(this.tiles, -32, (halfY * 32) + 70, 16);
-
-            if (this.game?.atStart) {
-                graphics.drawTile(this.tiles, -32, (halfY * 32) - 31, 61);
-                graphics.drawTile(this.tiles, -32, (halfY * 32) + 1, 61);
-                graphics.drawTile(this.tiles, -32, (halfY * 32) + 33, 61);
-            }
-            if (room.doors[Direction.WEST]) {
-                if (hasAllKeys) {
-                    graphics.alpha(0.5);
+                if (room.doors[Direction.NORTH]) {
+                    if (hasAllKeys) {
+                        graphics.alpha(0.5);
+                    }
+                    graphics.drawTile(this.tiles, halfX * 32, -32, base + 12);
+                    graphics.drawTile(this.tiles, (halfX + 1) * 32, -32, base + 13);
+                    graphics.alpha(1);
                 }
-                graphics.drawTile(this.tiles, -48, (halfY * 32) - 31, base+14);
-                graphics.drawTile(this.tiles, -48, (halfY * 32) + 1, base+30);
-                graphics.drawTile(this.tiles, -48, (halfY * 32) + 33, base+46);
-                graphics.alpha(1);
             }
-        }
-        // east door
-        if (room.connections[Direction.EAST]) {
-            graphics.drawTile(this.tiles, room.width * 32, (halfY * 32), 64);
-            graphics.drawTile(this.tiles, room.width * 32, (halfY * 32) + 32, 64);
-            graphics.drawTile(this.tiles, room.width * 32 - 32, (halfY * 32), 64);
-            graphics.drawTile(this.tiles, room.width * 32 - 32, (halfY * 32) + 32, 64);
+            // south door
+            if (room.connections[Direction.SOUTH]) {
+                graphics.drawTile(this.tiles, halfX * 32, (room.height * 32) - 32, 64);
+                graphics.drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32) - 32, 64);
+                graphics.drawTile(this.tiles, halfX * 32, (room.height * 32), 64);
+                graphics.drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32), 64);
+                graphics.drawTile(this.tiles, (halfX - 1) * 32, (room.height * 32), 128);
+                graphics.drawTile(this.tiles, (halfX + 2) * 32, (room.height * 32), 129);
 
-            graphics.drawTile(this.tiles, room.width * 32, (halfY * 32) - 32, 16);
-            graphics.drawTile(this.tiles, (room.width * 32) - 32, (halfY * 32) - 32, 144);
-            graphics.drawTile(this.tiles, room.width * 32, (halfY * 32) - 64, 0);
-
-            graphics.drawTile(this.tiles, room.width * 32, (halfY * 32) + 38, 0);
-            graphics.drawTile(this.tiles, room.width * 32, (halfY * 32) + 70, 16);
-
-            if (this.game?.atStart) {
-                graphics.drawTile(this.tiles, (room.width * 32), (halfY * 32) - 31, 61);
-                graphics.drawTile(this.tiles, (room.width * 32), (halfY * 32) + 1, 61);
-                graphics.drawTile(this.tiles, (room.width * 32), (halfY * 32) + 33, 61);
-            }
-
-            if (room.doors[Direction.EAST]) {
-                if (hasAllKeys) {
-                    graphics.alpha(0.5);
+                if (this.game?.atStart) {
+                    graphics.drawTile(this.tiles, halfX * 32, (room.height * 32), 45);
+                    graphics.drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32), 45);
                 }
-                graphics.drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) - 31, base+14);
-                graphics.drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) + 1, base+30);
-                graphics.drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) + 33, base+46);
-                graphics.alpha(1);
+                if (room.doors[Direction.SOUTH]) {
+                    if (hasAllKeys) {
+                        graphics.alpha(0.5);
+                    }
+                    graphics.drawTile(this.tiles, halfX * 32, (room.height * 32) + 32, base + 12);
+                    graphics.drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32) + 32, base + 13);
+                    graphics.alpha(1);
+                }
             }
-        }
+            // west door
+            if (room.connections[Direction.WEST]) {
+                graphics.drawTile(this.tiles, 0, (halfY * 32), 64);
+                graphics.drawTile(this.tiles, 0, (halfY * 32) + 32, 64);
+                graphics.drawTile(this.tiles, -32, (halfY * 32), 64);
+                graphics.drawTile(this.tiles, -32, (halfY * 32) + 32, 64);
+                graphics.drawTile(this.tiles, -32, (halfY * 32) - 32, 16);
+                graphics.drawTile(this.tiles, 0, (halfY * 32) - 32, 145);
+                graphics.drawTile(this.tiles, -32, (halfY * 32) - 64, 0);
+                graphics.drawTile(this.tiles, -32, (halfY * 32) + 38, 0);
+                graphics.drawTile(this.tiles, -32, (halfY * 32) + 70, 16);
 
-        // render any item in the world
-        if (room.item === "treasure") {
-            graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 6);
-        }
-        if (room.item === "speed") {
-            graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 28);
-        }
-        if (room.item === "health") {
-            graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 27);
-        }
-        if (room.item === "bronze" && !myEntity?.bronzeKey) {
-            graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 11);
-        }
-        if (room.item === "silver" && !myEntity?.silverKey) {
-            graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 10);
-        }
-        if (room.item === "gold" && !myEntity?.goldKey) {
-            graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 9);
-        }
-        if (room.item === "egg") {
-            graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16) - 32, 22);
-            graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 38);
-        }
-
-        // if there are spikes render them
-        if (room.spikes) {
-            for (const location of room.spikeLocations) {
-                // get the spike state and render the appropriate sprite to have
-                // the spikes popping in and out
-                const frame = getSpikeState(location.x + room.x, location.y + room.y, Rune.gameTime());
-                graphics.drawTile(this.tiles, location.x * 32, location.y * 32, 176 + frame);
+                if (this.game?.atStart) {
+                    graphics.drawTile(this.tiles, -32, (halfY * 32) - 31, 61);
+                    graphics.drawTile(this.tiles, -32, (halfY * 32) + 1, 61);
+                    graphics.drawTile(this.tiles, -32, (halfY * 32) + 33, 61);
+                }
+                if (room.doors[Direction.WEST]) {
+                    if (hasAllKeys) {
+                        graphics.alpha(0.5);
+                    }
+                    graphics.drawTile(this.tiles, -48, (halfY * 32) - 31, base + 14);
+                    graphics.drawTile(this.tiles, -48, (halfY * 32) + 1, base + 30);
+                    graphics.drawTile(this.tiles, -48, (halfY * 32) + 33, base + 46);
+                    graphics.alpha(1);
+                }
             }
+            // east door
+            if (room.connections[Direction.EAST]) {
+                graphics.drawTile(this.tiles, room.width * 32, (halfY * 32), 64);
+                graphics.drawTile(this.tiles, room.width * 32, (halfY * 32) + 32, 64);
+                graphics.drawTile(this.tiles, room.width * 32 - 32, (halfY * 32), 64);
+                graphics.drawTile(this.tiles, room.width * 32 - 32, (halfY * 32) + 32, 64);
+
+                graphics.drawTile(this.tiles, room.width * 32, (halfY * 32) - 32, 16);
+                graphics.drawTile(this.tiles, (room.width * 32) - 32, (halfY * 32) - 32, 144);
+                graphics.drawTile(this.tiles, room.width * 32, (halfY * 32) - 64, 0);
+
+                graphics.drawTile(this.tiles, room.width * 32, (halfY * 32) + 38, 0);
+                graphics.drawTile(this.tiles, room.width * 32, (halfY * 32) + 70, 16);
+
+                if (this.game?.atStart) {
+                    graphics.drawTile(this.tiles, (room.width * 32), (halfY * 32) - 31, 61);
+                    graphics.drawTile(this.tiles, (room.width * 32), (halfY * 32) + 1, 61);
+                    graphics.drawTile(this.tiles, (room.width * 32), (halfY * 32) + 33, 61);
+                }
+
+                if (room.doors[Direction.EAST]) {
+                    if (hasAllKeys) {
+                        graphics.alpha(0.5);
+                    }
+                    graphics.drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) - 31, base + 14);
+                    graphics.drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) + 1, base + 30);
+                    graphics.drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) + 33, base + 46);
+                    graphics.alpha(1);
+                }
+            }
+
+            // render any item in the world
+            if (room.item === "treasure") {
+                graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 6);
+            }
+            if (room.item === "speed") {
+                graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 28);
+            }
+            if (room.item === "health") {
+                graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 27);
+            }
+            if (room.item === "bronze" && !myEntity?.bronzeKey) {
+                graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 11);
+            }
+            if (room.item === "silver" && !myEntity?.silverKey) {
+                graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 10);
+            }
+            if (room.item === "gold" && !myEntity?.goldKey) {
+                graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 9);
+            }
+            if (room.item === "egg") {
+                graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16) - 32, 22);
+                graphics.drawTile(this.tiles, Math.floor((room.width - 1) * 16), Math.floor((room.height - 1) * 16), 38);
+            }
+            graphics.drawToMain();
         }
 
-        // debug for room locations
-        // if (this.game) {
-        //     const myEntity = this.game.entities.find(e => e.id === this.playerId)
-        //     if (myEntity) {
-        //         if (inRoomSpace(room, myEntity.x, myEntity.y)) {
-        //             graphics.fillRect(-32, -32, (room.width + 2) * 32, (room.height + 2) * 32, "rgba(255,0,0,0.5)");
-        //         }
-        //     }
-        // }
-        graphics.pop();
+
+        if (localRoom.offscreen) {
+            graphics.push();
+            graphics.translate((room.x * 32) - 64, (room.y * 32) - 64);
+
+            graphics.alpha(localRoom.fade);
+            graphics.drawOffscreen(localRoom.offscreen, 0, 0);
+            graphics.translate(64, 64);
+            // if there are spikes render them
+            if (room.spikes) {
+                for (const location of room.spikeLocations) {
+                    // get the spike state and render the appropriate sprite to have
+                    // the spikes popping in and out
+                    const frame = getSpikeState(location.x + room.x, location.y + room.y, Rune.gameTime());
+                    graphics.drawTile(this.tiles, location.x * 32, location.y * 32, 176 + frame);
+                }
+            }
+            graphics.alpha(1);
+
+            graphics.pop();
+        }
+    }
+
+    updateMinimap(): void {
+        if (this.game && this.minimap) {
+            graphics.drawToOffscreen(this.minimap);
+            graphics.clearRect(0, 0, graphics.width(), graphics.height());
+            graphics.push();
+
+            graphics.scale(1.5, 1.5);
+            graphics.fillRect(0, 0, 84, 84, "rgba(0,0,0,0.5)");
+            graphics.translate(42, 42);
+            for (const room of this.game.rooms) {
+                if (room.discovered) {
+                    let col = "rgba(255,255,255,0.8)";
+                    if (room.item === "bronze") {
+                        col = "rgba(255,155,0,0.8)";
+                    }
+                    if (room.item === "silver") {
+                        col = "rgba(240,240,255,0.8)";
+                    }
+                    if (room.item === "gold") {
+                        col = "rgba(255,255,0,0.8)";
+                    }
+                    if (room.enemy || room.spikes) {
+                        col = "rgba(255,50,50,0.8)";
+                    }
+                    graphics.fillRect(room.x, room.y, room.width, room.height, col);
+                    if (room.connections[Direction.NORTH]) {
+                        graphics.fillRect(room.x + (room.width / 2) - 2, room.y - 2, 4, 2, room.doors[Direction.NORTH] ? "rgb(255,255,0)" : "rgb(200,200,200)");
+                    }
+                    if (room.connections[Direction.SOUTH]) {
+                        graphics.fillRect(room.x + (room.width / 2) - 2, room.y + room.height, 4, 2, room.doors[Direction.SOUTH] ? "rgb(255,255,0)" : "rgb(200,200,200)");
+                    }
+                    if (room.connections[Direction.WEST]) {
+                        graphics.fillRect(room.x - 2, room.y + (room.height / 2) - 2, 2, 4, room.doors[Direction.WEST] ? "rgb(255,255,0)" : "rgb(200,200,200)");
+                    }
+                    if (room.connections[Direction.EAST]) {
+                        graphics.fillRect(room.x + room.width, room.y + (room.height / 2) - 2, 2, 4, room.doors[Direction.EAST] ? "rgb(255,255,0)" : "rgb(200,200,200)");
+                    }
+                }
+            }
+            graphics.pop();
+            graphics.drawToMain();
+        }
     }
 
     render(): void {
-        graphics.fillRect(0,0,graphics.width(), graphics.height(), "black");
+        this.frameCount++;
+        if (this.frameCount % 2 !== 0) {
+            return;
+        }
+
+        graphics.fillRect(0, 0, graphics.width(), graphics.height(), "black");
 
         // calculate the controls size based on the screen size
         this.controlSize = graphics.width() / 5;
@@ -846,38 +951,45 @@ export class GoDungeonGo implements Game {
                     this.viewX = pos[0] - (graphics.width() / 2);
                     this.viewY = pos[1] - (graphics.height() * 0.4);
 
-                    for (const room of findAllRoomsAt(this.game, myEntity.x, myEntity.y)) {
+                    for (const room of this.findAllRoomsAt(this.game, myEntity.x, myEntity.y)) {
                         const localRoom = this.localRooms[room.id];
-                        localRoom.discovered = true;
+                        if (!localRoom.discovered) {
+                            localRoom.discovered = true;
+                        }
                     }
                 }
 
                 for (const room of Object.values(this.localRooms)) {
                     if (room.discovered && room.fade < 1) {
                         room.fade += 0.1;
+                        if (room.fade > 1) {
+                            room.fade = 1;
+                        }
                     }
                 }
 
                 graphics.push();
                 graphics.translate(-this.viewX, -this.viewY);
 
+                this.roomsDrawn = 0;
+
                 // render all the rooms
                 for (const room of this.game.rooms) {
                     if (myEntity) {
                         // very simple culling of rooms that are off screen.
-                        const dx = Math.abs((room.x * 32) - myEntity.x)
-                        const dy = Math.abs((room.y * 32) - myEntity.y);
-                        if (dx > graphics.width() * 2 || dy > graphics.height() * 2) {
+                        const dx = Math.abs(((room.x + (room.width / 2)) * 32) - myEntity.x)
+                        const dy = Math.abs(((room.y + (room.height / 2)) * 32) - myEntity.y);
+                        if (dx > graphics.width() || dy > graphics.height()) {
                             continue;
                         }
                     }
 
+
                     const localRoom = this.localRooms[room.id];
                     if (localRoom && localRoom.discovered) {
                         // if the room is fading in on discovery then apply the alpha
-                        graphics.alpha(localRoom.fade);
                         this.drawRoom(room);
-                        graphics.alpha(1);
+                        this.roomsDrawn++;
                     }
                 }
 
@@ -888,7 +1000,7 @@ export class GoDungeonGo implements Game {
                 ysort.sort((a, b) => a.y - b.y);
 
                 for (const entity of ysort) {
-                    const room = findRoomAt(this.game, entity.x, entity.y);
+                    const room = this.findRoomAt(this.game, entity.x, entity.y);
                     if (room) {
                         const localRoom = this.localRooms[room.id];
                         // only render an entity if the room its in has been
@@ -901,7 +1013,7 @@ export class GoDungeonGo implements Game {
                             sprite.update(pos[0], pos[1], entity.controls);
 
                             // move the animation forward
-                            sprite.frame += 0.1;
+                            sprite.frame += 0.2;
                             if (sprite.frame >= entity.anim.count) {
                                 sprite.frame = 0;
                             }
@@ -938,11 +1050,11 @@ export class GoDungeonGo implements Game {
                                 graphics.translate(-32, 0);
                             }
 
-                            graphics.translate(16,16);
+                            graphics.translate(16, 16);
                             if (Rune.gameTime() < entity.respawnedAt + 1000) {
                                 // respawn in place, do the effect
                                 let delta = 1 - (((entity.respawnedAt + 1000) - Rune.gameTime()) / 1000);
-                                if (delta > 0.5) { 
+                                if (delta > 0.5) {
                                     delta = (delta - 0.5) / 0.5;
                                     graphics.alpha(delta);
                                     graphics.scale(5 - (delta * 4), 5 - (delta * 4));
@@ -981,52 +1093,23 @@ export class GoDungeonGo implements Game {
 
                 // render mini map
                 if (this.game && !this.game.atStart && !this.game.gameOver) {
+                    if (!this.minimap) {
+                        this.minimap = graphics.createOffscreen(150, 150);
+                    }
+                    graphics.alpha(1);
+                    graphics.drawOffscreen(this.minimap, 0, 0);
+
                     graphics.push();
 
-                    const myEntity = this.game.entities.find(e => e.id === this.playerId)
-                    if (myEntity) {
-                        graphics.scale(1.5, 1.5);
-                        graphics.fillRect(0, 0, 84, 84, "rgba(0,0,0,0.5)");
-                        graphics.translate(42, 42);
-                        for (const room of this.game.rooms) {
-                            if (room.discovered) {
-                                let col = "rgba(255,255,255,0.5)";
-                                if (room.item === "bronze") {
-                                    col = "rgba(255,155,0,0.8)";
-                                }
-                                if (room.item === "silver") {
-                                    col = "rgba(240,240,255,0.8)";
-                                }
-                                if (room.item === "gold") {
-                                    col = "rgba(255,255,0,0.8)";
-                                }
-                                if (room.enemy || room.spikes) {
-                                    col = "rgba(255,50,50,0.4)";
-                                }
-                                graphics.fillRect(room.x, room.y, room.width, room.height, col);
-                                if (room.connections[Direction.NORTH]) {
-                                    graphics.fillRect(room.x + (room.width / 2) - 2, room.y - 2, 4, 2, room.doors[Direction.NORTH] ? "rgb(255,255,0)" : "rgb(200,200,200)");
-                                }
-                                if (room.connections[Direction.SOUTH]) {
-                                    graphics.fillRect(room.x + (room.width / 2) - 2, room.y + room.height, 4, 2, room.doors[Direction.SOUTH] ? "rgb(255,255,0)" : "rgb(200,200,200)");
-                                }
-                                if (room.connections[Direction.WEST]) {
-                                    graphics.fillRect(room.x - 2, room.y + (room.height / 2) - 2, 2, 4, room.doors[Direction.WEST] ? "rgb(255,255,0)" : "rgb(200,200,200)");
-                                }
-                                if (room.connections[Direction.EAST]) {
-                                    graphics.fillRect(room.x + room.width, room.y + (room.height / 2) - 2, 2, 4, room.doors[Direction.EAST] ? "rgb(255,255,0)" : "rgb(200,200,200)");
-                                }
-                            }
-                        }
-
-                        for (const entity of this.game.entities.filter(e => e.type !== EntityType.MONSTER)) {
-                            const room = findRoomAt(this.game, entity.x, entity.y);
-                            if (room && room.discovered) {
-                                const localRoom = this.localRooms[room.id];
-                                if (localRoom) {
-                                    // TODO - Use a sprite here
-                                    // graphics.fillCircle(Math.floor(entity.x / 32), Math.floor(entity.y / 32), 1.5, entity === myEntity ? "white" : "black");
-                                }
+                    graphics.scale(1.5, 1.5);
+                    graphics.fillRect(0, 0, 84, 84, "rgba(0,0,0,0.5)");
+                    graphics.translate(42, 42);
+                    for (const entity of this.game.entities.filter(e => e.type !== EntityType.MONSTER)) {
+                        const room = this.findRoomAt(this.game, entity.x, entity.y);
+                        if (room && room.discovered) {
+                            const localRoom = this.localRooms[room.id];
+                            if (localRoom) {
+                                graphics.fillRect(Math.floor(entity.x / 32) - 1, Math.floor(entity.y / 32) - 1, 3, 3, entity === myEntity ? "white" : "black");
                             }
                         }
                     }
@@ -1064,20 +1147,20 @@ export class GoDungeonGo implements Game {
                             x -= 16;
                         }
                         const keys = [9, 10, 11];
-                        for (let i=0;i<this.game.keyCount;i++) {
-                            graphics.drawTile(this.tiles, Math.floor(x + (i*32)),170,keys[i]);
+                        for (let i = 0; i < this.game.keyCount; i++) {
+                            graphics.drawTile(this.tiles, Math.floor(x + (i * 32)), 170, keys[i]);
                         }
                         graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(message, this.font20White)) / 2, 160, message, this.font20White);
                     } else if (this.game.countDown > 0) {
                         const message = "Get the Egg!";
-                        graphics.drawTile(this.tiles, Math.floor((graphics.width() / 2) - 16),148, 22);
-                        graphics.drawTile(this.tiles, Math.floor((graphics.width() / 2) - 16),180, 38);
+                        graphics.drawTile(this.tiles, Math.floor((graphics.width() / 2) - 16), 148, 22);
+                        graphics.drawTile(this.tiles, Math.floor((graphics.width() / 2) - 16), 180, 38);
                         graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(message, this.font20White)) / 2, 160, message, this.font20White);
                     } else {
                         const message = this.game.statusMessage;
                         graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(message, this.font20White)) / 2, 160, message, this.font20White);
                     }
-                    
+
                     if (this.game.countDown > 0) {
                         // TODO use sprite here
                         // graphics.fillCircle((Math.floor(graphics.width() - graphics.textWidth(this.game.countDown + "", 50)) / 2)+15, 265, 40, "rgba(255,50,50,0.8)");
@@ -1174,7 +1257,7 @@ export class GoDungeonGo implements Game {
                 graphics.drawText(Math.floor((graphics.width() - graphics.textWidth("Play!", this.font20White)) / 2), 388, "Play!", this.font20White);
 
                 const name = CHAR_NAMES[this.selectedType];
-                graphics.drawText(Math.floor((graphics.width() - graphics.textWidth(name, this.font20White)) / 2), 230, name,this.font20White);
+                graphics.drawText(Math.floor((graphics.width() - graphics.textWidth(name, this.font20White)) / 2), 230, name, this.font20White);
             }
 
             const versionString = "1.03";
@@ -1202,6 +1285,12 @@ export class GoDungeonGo implements Game {
             }
         }
         graphics.pop();
+
+        if (window.location.protocol === "http:") {
+            graphics.drawText(0, 20, "FPS: " + graphics.getFPS(), this.font10White);
+            graphics.drawText(0, 35, "Visible Rooms: " + this.roomsDrawn, this.font10White);
+            graphics.drawText(0, 50, "Draw Counts: " + graphics.getDrawCount(), this.font10White);
+        }
     }
 
 }
