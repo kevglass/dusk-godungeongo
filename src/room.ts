@@ -229,6 +229,49 @@ export function generateDungeon(state: GameState): void {
     });
 
     state.startRoom = deepestRoom.id;
+
+    for (let i=0;i<state.rooms.length;i++) {
+        const room = state.rooms[i];
+        for (let x=0;x<room.width;x++) {
+            for (let y=1;y<room.height;y++) {
+                const xp = (room.x + x) + 50;
+                const yp = (room.y + y) + 50;
+                state.roomMap[xp + (yp * 100)] = i + 1;
+            }
+        }
+
+        const halfX = Math.floor(room.width / 2) - 1;
+        const halfY = Math.floor(room.height / 2) - 1;
+
+        if (room.connections[Direction.NORTH]) {
+            const xp = (room.x + halfX) + 50;
+            const yp = (room.y) + 50;
+            state.roomMap[xp + (yp * 100)] = i + 1;
+            state.roomMap[xp+1 + (yp * 100)] = i + 1;
+            state.roomMap[xp + ((yp-1) * 100)] = i + 1;
+            state.roomMap[xp+1 + ((yp-1) * 100)] = i + 1;
+        }
+        if (room.connections[Direction.SOUTH]) {
+            const xp = (room.x + halfX) + 50;
+            const yp = (room.y + room.height + 1) + 50;
+            state.roomMap[xp + (yp * 100)] = i + 1;
+            state.roomMap[xp+1 + (yp * 100)] = i + 1;
+            state.roomMap[xp + ((yp-1) * 100)] = i + 1;
+            state.roomMap[xp+1 + ((yp-1) * 100)] = i + 1;
+        }
+        if (room.connections[Direction.WEST]) {
+            const xp = (room.x - 1) + 50;
+            const yp = (room.y + halfY) + 50;
+            state.roomMap[xp + (yp * 100)] = i + 1;
+            state.roomMap[xp + ((yp+1) * 100)] = i + 1;
+        }
+        if (room.connections[Direction.EAST]) {
+            const xp = (room.x + room.width) + 50;
+            const yp = (room.y + halfY) + 50;
+            state.roomMap[xp + (yp * 100)] = i + 1;
+            state.roomMap[xp + ((yp+1) * 100)] = i + 1;
+        }
+    }
 }
 
 // Check if one room overlaps another - used to during generation
@@ -271,24 +314,17 @@ function fillDepth(rooms: Room[], room: Room, depth: number) {
     }
 }
 
-// Find all the rooms at the specified pixel location
-export function findAllRoomsAt(state: GameState, x: number, y: number): Room[] {
-    let rooms = state.roomsMap[x + (y * 10000)];
-    if (!rooms) {
-        rooms = state.roomsMap[x+(y*10000)] = state.rooms.filter(r => inRoomSpace(r, x, y)).map(r => state.rooms.indexOf(r));
-    }
-    return rooms.map(i => state.rooms[i]);
-}
-
 // Find any room at the specified pixel location
 export function findRoomAt(state: GameState, x: number, y: number): Room | undefined {
-    let roomIndex = state.roomMap[x + (y * 10000)];
-    if (!roomIndex) {
-        const targetRoom = state.rooms.find(r => inRoomSpace(r, x, y));
-        roomIndex = state.roomMap[x+(y*10000)] = targetRoom ? state.rooms.indexOf(targetRoom) : -1;
+    x = Math.floor(x / 32) + 50;
+    y = Math.floor(y / 32) + 50;
+
+    const roomIndex = state.roomMap[x + (y * 100)];
+    if (roomIndex) {
+        return state.rooms[roomIndex - 1];
     }
 
-    return state.rooms[roomIndex];
+    return undefined;
 }
 
 // Check if the location given is close to the centre of the room
@@ -299,7 +335,7 @@ export function closeToCenter(room: Room, x: number, y: number) {
     const dx = Math.abs(cx - x);
     const dy = Math.abs(cy - y);
 
-    return (dx < 32 && dy < 32);
+    return (dx < 48 && dy < 48);
 }
 
 // Broad check to see if the location given in pixels is in the 
@@ -315,52 +351,48 @@ export function inRoomSpace(room: Room, x: number, y: number) {
 // Check if a specified location given in pixels is blocked for
 // movement purposes. If an entity reaches a location that is blocked
 // its movement will be reversed
-export function blockedLocationInRoom(atStart: boolean, room: Room, x: number, y: number, hasAllKeys: boolean) {
+export function blockedLocationInRoom(state: GameState, x: number, y: number, hasAllKeys: boolean) {
     // convert to tile space
-    x = x / 32;
-    y = y / 32;
+    const playerSize = 16;
+    const playerHeight = 6;
+    let targetRoom = -1;
 
-    // if we're in the main part of the room, then we're not blocked
-    if (x >= room.x + 0.5 && y >= room.y + 1.1 && x < room.x + room.width - 0.4 && y < room.y + room.height - 0.2) {
-        return false;
-    }
-
-    // if we're waiting at the start of the game, everything but the main part of the room
-    // is blocked to stop people getting a head start :)
-    if (atStart) {
-        return true;
-    }
-
-    const halfX = room.x + Math.floor(room.width / 2) - 1;
-    const halfY = room.y + Math.floor(room.height / 2) - 1;
-
-    // check each of door way locations. We can stand in the middle of the room in 
-    // any doorway assuming theres no door there
-    if (room.connections[Direction.NORTH]) {
-        const topOffset = !hasAllKeys && room.doors[Direction.NORTH] ? -0.5 : 1;
-
-        if (x >= halfX + 0.5 && x < halfX + 2 - 0.4 && y > room.y - topOffset && y < room.y + 4) {
-            return false;
+    for (let xo=-playerSize;xo<=playerSize;xo+=playerSize) {
+        for (let yo=-playerHeight;yo<=playerHeight;yo+=playerHeight*2) {
+            const xp = Math.floor((x+xo) / 32) + 50;
+            const yp = Math.floor((y+yo) / 32) + 50;
+            const roomIndex = state.roomMap[xp + (yp * 100)];
+            if (!roomIndex) {
+                return true;
+            }
+            targetRoom = roomIndex;
         }
     }
-    if (room.connections[Direction.SOUTH]) {
-        const bottomOffset = !hasAllKeys && room.doors[Direction.SOUTH] ? 0.8 : 1
-        if (x >= halfX + 0.5 && x < halfX + 2 - 0.4 && y < room.y + room.height + bottomOffset && y > room.y + 4) {
-            return false;
+    const room = state.rooms[targetRoom - 1];
+    const xp = Math.floor(x / 32);
+    const yp = Math.floor(y / 32);
+
+    // can't leave the room at start
+    if (state.atStart) {
+        if (xp < room.x || yp < room.y + 1 || xp >= room.x + room.width || yp >= room.y + room.height) {
+            return true;
         }
     }
-    if (room.connections[Direction.WEST]) {
-        const leftOffset = !hasAllKeys && room.doors[Direction.WEST] ? 0 : 1
-        if (y >= halfY + 0.1 && y < halfY + 2 && x >= room.x - leftOffset && x < room.x + 4) {
-            return false;
+    // if we don't have a key then we can't use the door
+    if (!hasAllKeys) {
+        if (room.doors[Direction.NORTH] && yp > room.y + 1) {
+            return true;
         }
-    }
-    if (room.connections[Direction.EAST]) {
-        const rightOffset = !hasAllKeys && room.doors[Direction.EAST] ? 0 : 1
-        if (y >= halfY + 0.1 && y < halfY + 2 && x < room.x + room.width + rightOffset && x > room.x + 4) {
-            return false;
+        if (room.doors[Direction.SOUTH] && yp >= room.y + room.height) {
+            return true;
+        }
+        if (room.doors[Direction.WEST] && xp < room.x) {
+            return true;
+        }
+        if (room.doors[Direction.EAST] && xp >= room.x + room.width) {
+            return true;
         }
     }
 
-    return true;
+    return false;
 }

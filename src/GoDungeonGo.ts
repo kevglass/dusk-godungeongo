@@ -766,7 +766,7 @@ export class GoDungeonGo implements Game {
                 }
                 if (room.doors[Direction.NORTH]) {
                     if (hasAllKeys) {
-                        graphics.alpha(0.5);
+                        graphics.alpha(0.7);
                     }
                     graphics.drawTile(this.tiles, halfX * 32, -32, base + 12);
                     graphics.drawTile(this.tiles, (halfX + 1) * 32, -32, base + 13);
@@ -788,7 +788,7 @@ export class GoDungeonGo implements Game {
                 }
                 if (room.doors[Direction.SOUTH]) {
                     if (hasAllKeys) {
-                        graphics.alpha(0.5);
+                        graphics.alpha(0.7);
                     }
                     graphics.drawTile(this.tiles, halfX * 32, (room.height * 32) + 32, base + 12);
                     graphics.drawTile(this.tiles, (halfX + 1) * 32, (room.height * 32) + 32, base + 13);
@@ -814,7 +814,7 @@ export class GoDungeonGo implements Game {
                 }
                 if (room.doors[Direction.WEST]) {
                     if (hasAllKeys) {
-                        graphics.alpha(0.5);
+                        graphics.alpha(0.7);
                     }
                     graphics.drawTile(this.tiles, -48, (halfY * 32) - 31, base + 14);
                     graphics.drawTile(this.tiles, -48, (halfY * 32) + 1, base + 30);
@@ -844,7 +844,7 @@ export class GoDungeonGo implements Game {
 
                 if (room.doors[Direction.EAST]) {
                     if (hasAllKeys) {
-                        graphics.alpha(0.5);
+                        graphics.alpha(0.7);
                     }
                     graphics.drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) - 31, base + 14);
                     graphics.drawTile(this.tiles, (room.width * 32) + 16, (halfY * 32) + 1, base + 30);
@@ -907,24 +907,25 @@ export class GoDungeonGo implements Game {
             graphics.drawToOffscreen(this.minimap);
             graphics.clearRect(0, 0, graphics.width(), graphics.height());
             graphics.push();
+            graphics.alpha(1);
 
             graphics.scale(1.5, 1.5);
             graphics.fillRect(0, 0, 84, 84, "rgba(0,0,0,0.5)");
             graphics.translate(42, 42);
             for (const room of this.game.rooms) {
                 if (room.discovered) {
-                    let col = "rgba(255,255,255,0.8)";
+                    let col = "rgba(255,255,255,0.5)";
                     if (room.item === "bronze") {
-                        col = "rgba(255,155,0,0.8)";
+                        col = "rgba(255,155,0,0.7)";
                     }
                     if (room.item === "silver") {
-                        col = "rgba(240,240,255,0.8)";
+                        col = "rgba(240,240,255,0.7)";
                     }
                     if (room.item === "gold") {
-                        col = "rgba(255,255,0,0.8)";
+                        col = "rgba(255,255,0,0.7)";
                     }
                     if (room.enemy || room.spikes) {
-                        col = "rgba(255,50,50,0.8)";
+                        col = "rgba(255,50,50,0.5)";
                     }
                     graphics.fillRect(room.x, room.y, room.width, room.height, col);
                     if (room.connections[Direction.NORTH]) {
@@ -969,7 +970,8 @@ export class GoDungeonGo implements Game {
                     this.viewX = pos[0] - (graphics.width() / 2);
                     this.viewY = pos[1] - (graphics.height() * 0.4);
 
-                    for (const room of this.findAllRoomsAt(this.game, myEntity.x, myEntity.y)) {
+                    const room = this.findRoomAt(this.game, myEntity.x, myEntity.y);
+                    if (room) {
                         const localRoom = this.localRooms[room.id];
                         if (!localRoom.discovered) {
                             localRoom.discovered = true;
@@ -1116,11 +1118,12 @@ export class GoDungeonGo implements Game {
                     }
                     graphics.alpha(1);
                     graphics.drawOffscreen(this.minimap, 0, 0);
+                    graphics.drawOffscreen(this.minimap, 0, 0);
+
 
                     graphics.push();
 
                     graphics.scale(1.5, 1.5);
-                    graphics.fillRect(0, 0, 84, 84, "rgba(0,0,0,0.5)");
                     graphics.translate(42, 42);
                     for (const entity of this.game.entities.filter(e => e.type !== EntityType.MONSTER)) {
                         const room = this.findRoomAt(this.game, entity.x, entity.y);
@@ -1240,7 +1243,7 @@ export class GoDungeonGo implements Game {
                 }
             } else {
                 // render main menu 
-                this.frame += 0.1;
+                this.frame += 0.2;
                 const frameIndex = Math.floor(this.frame) % RUN.count;
 
                 let width = this.logo.width;
@@ -1309,11 +1312,11 @@ export class GoDungeonGo implements Game {
         }
         graphics.pop();
 
-        if (window.location.protocol === "http:") {
-            graphics.drawText(0, 20, "FPS: " + graphics.getFPS(), this.font10White);
-            graphics.drawText(0, 35, "Visible Rooms: " + this.roomsDrawn, this.font10White);
-            graphics.drawText(0, 50, "Draw Counts: " + graphics.getDrawCount(), this.font10White);
-        }
+        // if (window.location.protocol === "http:") {
+        //     graphics.drawText(0, 20, "FPS: " + graphics.getFPS(), this.font10White);
+        //     graphics.drawText(0, 35, "Visible Rooms: " + this.roomsDrawn, this.font10White);
+        //     graphics.drawText(0, 50, "Draw Counts: " + graphics.getDrawCount(), this.font10White);
+        // }
     }
 
 }

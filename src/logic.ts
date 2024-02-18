@@ -34,9 +34,7 @@ export interface GameState {
   // The rooms that build up our dungeon
   rooms: Room[];
   // Room map
-  roomMap: Record<string, number>;
-  // Room map
-  roomsMap: Record<string, number[]>;
+  roomMap: number[];
   // The room that players start in
   startRoom: number;
   // The scores keyed on Player ID
@@ -186,8 +184,7 @@ function startGame(state: GameState) {
   const existingPlayers = state.entities.filter(e => e.type !== EntityType.MONSTER);
   state.entities = [];
   state.rooms = [];
-  state.roomsMap = {};
-  state.roomMap = {};
+  state.roomMap = [];
   state.startRoom = 0;
   state.startRace = 0;
   state.countDown = -1;
@@ -224,8 +221,7 @@ Rune.initLogic({
     const initialState = {
       entities: [],
       rooms: [],
-      roomMap: {},
-      roomsMap: {},
+      roomMap: [],
       startRoom: 0,
       scores: {},
       atStart: true,
@@ -365,47 +361,56 @@ Rune.initLogic({
         if (room.item) {
           if (closeToCenter(room, entity.x, entity.y)) {
             // intersect with the item in the room
-            if (room.item === "bronze" && !entity.bronzeKey) {
-              entity.bronzeKey = true;
-              context.game.scores[entity.id] += 1;
-              context.game.events.push({ type: GameEventType.GOT_BRONZE, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
-            }
-            if (room.item === "silver" && !entity.silverKey) {
-              entity.silverKey = true;
-              context.game.scores[entity.id] += 1;
-              context.game.events.push({ type: GameEventType.GOT_SILVER, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
-            }
-            if (room.item === "gold" && !entity.goldKey) {
-              entity.goldKey = true;
-              context.game.scores[entity.id] += 1;
-              context.game.events.push({ type: GameEventType.GOT_GOLD, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
-            }
-            if (room.item === "health") {
-              if (!entity.item) {
-                entity.item = "health";
+            switch (room.item) {
+              case "bronze":
+                if (!entity.bronzeKey) {
+                  entity.bronzeKey = true;
+                  context.game.scores[entity.id] += 1;
+                  context.game.events.push({ type: GameEventType.GOT_BRONZE, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
+                }
+                break;
+              case "silver":
+                if (!entity.silverKey) {
+                  entity.silverKey = true;
+                  context.game.scores[entity.id] += 1;
+                  context.game.events.push({ type: GameEventType.GOT_SILVER, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
+                }
+                break;
+              case "gold":
+                if (!entity.goldKey) {
+                  entity.goldKey = true;
+                  context.game.scores[entity.id] += 1;
+                  context.game.events.push({ type: GameEventType.GOT_GOLD, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
+                }
+                break;
+              case "health":
+                if (!entity.item) {
+                  entity.item = "health";
+                  room.item = undefined;
+                  context.game.events.push({ type: GameEventType.GOT_HEALTH, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
+                }
+                break;
+              case "speed":
+                if (!entity.item) {
+                  entity.item = "speed";
+                  room.item = undefined;
+                  context.game.events.push({ type: GameEventType.GOT_SPEED, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
+                }
+                break;
+              case "treasure":
+                context.game.scores[entity.id] += 2;
                 room.item = undefined;
-                context.game.events.push({ type: GameEventType.GOT_HEALTH, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
-              }
-            }
-            if (room.item === "speed") {
-              if (!entity.item) {
-                entity.item = "speed";
-                room.item = undefined;
-                context.game.events.push({ type: GameEventType.GOT_SPEED, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
-              }
-            }
-            if (room.item === "treasure") {
-              context.game.scores[entity.id] += 2;
-              room.item = undefined;
-              context.game.events.push({ type: GameEventType.GOT_TREASURE, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
-            }
-
-            if (room.item === "egg" && !context.game.winner) {
-              context.game.scores[entity.id] += 7;
-              context.game.winner = entity.id;
-              context.game.gameOver = true;
-              context.game.gameOverTime = Rune.gameTime();
-              context.game.events.push({ type: GameEventType.WIN });
+                context.game.events.push({ type: GameEventType.GOT_TREASURE, who: entity.id, x: room.x + room.width / 2, y: room.y + room.height / 2 });
+                break;
+              case "egg":
+                if (!context.game.winner) {
+                  context.game.scores[entity.id] += 7;
+                  context.game.winner = entity.id;
+                  context.game.gameOver = true;
+                  context.game.gameOverTime = Rune.gameTime();
+                  context.game.events.push({ type: GameEventType.WIN });
+                }
+                break;
             }
           }
         }
@@ -426,15 +431,15 @@ Rune.initLogic({
     // if they are apply the health change and potential respawn
     for (const entity of context.game.entities.filter(e => e.type !== EntityType.MONSTER)) {
       // have to wait a second if you respawn
-      if (Rune.gameTime() < entity.respawnedAt + 1000) {
+      if (Rune.gameTime() < entity.respawnedAt + 2000) {
         continue;
       }
-
-      const room = findRoomAt(context.game, entity.x, entity.y);
 
       // players can only be hurt every couple of seconds. They'll go into the traditional 
       // flashing state while in grace
       if (Rune.gameTime() - entity.hurtAt > HURT_GRACE) {
+        const room = findRoomAt(context.game, entity.x, entity.y);
+  
         // find any monsters that are close enough to damage the player - if there
         // is one then apply the health change
         const touchingMonster = context.game.entities.find(e => e.type === EntityType.MONSTER && Math.abs(e.x - entity.x) < 16 && Math.abs(e.y - entity.y) < 16);
