@@ -37,10 +37,8 @@ export interface Animation {
 // the bit that set through an action to update the game
 // state
 export interface Controls {
-    left: boolean;
-    right: boolean;
-    up: boolean;
-    down: boolean;
+    x: number;
+    y: number;
 }
 
 // Animation to play when not moving
@@ -93,10 +91,8 @@ export function createEntity(id: string, x: number, y: number, type: EntityType)
         speed: PLAYER_SPEED,
         speedTimeout: 0,
         controls: {
-            left: false,
-            right: false,
-            up: false,
-            down: false
+            x: 0,
+            y: 0
         },
         goldKey: false,
         silverKey: false,
@@ -147,34 +143,26 @@ export function updateEntity(time: number, state: GameState, entity: Entity, ste
     } else {
         // if its a player we need to apply the current state of the player controls (if
         // they're pressing any)
-        const controlsDown = Object.values(entity.controls).filter(m => m === true).length;
+        const controlsDown = Object.values(entity.controls).filter(m => m != 0).length;
         if (controlsDown > 0) {
             // diagonal movement needs to be scaled so that moving diagonally is not 
             // faster than straight 
-            const speed = (controlsDown > 1 ? entity.speed * 0.8 : entity.speed) * step;
+            const hardDiagonal = Math.abs(entity.x) + Math.abs(entity.y) === 1;
+            const speed = (hardDiagonal ? entity.speed * 0.8 : entity.speed) * step;
 
             // consider X axis movement, try it, check for collision, undo the change if 
             // we're hitting a wall 
             const oldX = entity.x;
             const oldY = entity.y;
-            if (entity.controls.left) {
-                entity.x -= speed;
-            }
-            if (entity.controls.right) {
-                entity.x += speed;
-            }
+
+            entity.x += entity.controls.x * speed;
             if (blockedLocationInRoom(state, entity.x, entity.y, entity.goldKey && entity.silverKey && (state.keyCount < 3 || entity.bronzeKey))) {
                 entity.x = oldX;
             }
 
             // consider Y axis movement, try it, check for collision, undo the change if 
             // we're hitting a wall 
-            if (entity.controls.up) {
-                entity.y -= speed;
-            }
-            if (entity.controls.down) {
-                entity.y += speed;
-            }
+            entity.y -= entity.controls.y * speed;
             if (blockedLocationInRoom(state, entity.x, entity.y, entity.goldKey && entity.silverKey && (state.keyCount < 3 || entity.bronzeKey))) {
                 entity.y = oldY;
             }

@@ -138,8 +138,8 @@ export class EntitySprite {
         const controlsDown = Object.values(controls).filter(e => e).length;
 
         if (controlsDown) {
-            const lastX = controls.left ? x + 5 : controls.right ? x - 5 : x;
-            const lastY = controls.up ? y + 5 : controls.down ? y - 5 : y;
+            const lastX = controls.x * 5; 
+            const lastY = -controls.y * 5;
 
             this.lastFrames.push({
                 x: (x + lastX) / 2, y: (y + lastY) / 2, dieAt: Rune.gameTime() + PUFF_TIME,
@@ -289,10 +289,8 @@ export class GoDungeonGo implements Game {
 
     // local controls
     controls: Controls = {
-        left: false,
-        right: false,
-        up: false,
-        down: false
+        x: 0,
+        y: 0
     };
     lastActionedControls = { ...this.controls };
 
@@ -341,29 +339,18 @@ export class GoDungeonGo implements Game {
         this.joystick = nipplejs.create({
             mode: "static",
             zone: document.getElementById("joystick") ?? document.body,
-            position: { left: '40%', bottom: '35%' }
+            position: { left: '40%', bottom: '35%' },
+            threshold: 0.2,
+            
+            
         });
         this.joystick.on("move", (event, joystick) => {
-            if (Math.abs(joystick.vector.x) > 0.1) {
-                this.controls.left = joystick.direction.x === "left";
-                this.controls.right = joystick.direction.x === "right";
-            } else {
-                this.controls.left = false;
-                this.controls.right = false;
-            }
-            if (Math.abs(joystick.vector.y) > 0.1) {
-                this.controls.up = joystick.direction.y === "up";
-                this.controls.down = joystick.direction.y === "down";
-            } else {
-                this.controls.up = false;
-                this.controls.down = false;
-            }
+            this.controls.x = Math.abs(joystick.vector.x) < 0.1 ? 0 : joystick.vector.x;
+            this.controls.y = Math.abs(joystick.vector.y) < 0.1 ? 0 : joystick.vector.y;
         });
         this.joystick.on("end", () => {
-            this.controls.left = false;
-            this.controls.right = false;
-            this.controls.up = false;
-            this.controls.down = false;
+            this.controls.x = 0;
+            this.controls.y = 0;
         });
     }
     resourcesLoaded(): void {
@@ -585,8 +572,8 @@ export class GoDungeonGo implements Game {
 
     updateControls(): void {
         if (this.game && Date.now() - this.lastControlsSent > 1000 / 8) {
-            if ((this.lastActionedControls.left !== this.controls.left) || (this.lastActionedControls.right !== this.controls.right) ||
-                (this.lastActionedControls.up !== this.controls.up) || (this.lastActionedControls.down !== this.controls.down)) {
+            if ((this.lastActionedControls.x !== this.controls.x) ||
+                (this.lastActionedControls.y !== this.controls.y)) {
                 Rune.actions.applyControls({ ...this.controls });
                 this.lastActionedControls = { ...this.controls };
                 this.lastControlsSent = Date.now();
@@ -646,16 +633,16 @@ export class GoDungeonGo implements Game {
             const myEntity = this.game.entities.find(e => e.id === this.playerId);
             if (myEntity) {
                 if (key === "ArrowLeft") {
-                    this.controls.left = true;
+                    this.controls.x = -1;
                 }
                 if (key === "ArrowRight") {
-                    this.controls.right = true;
+                    this.controls.x = 1;
                 }
                 if (key === "ArrowUp") {
-                    this.controls.up = true;
+                    this.controls.y = 1;
                 }
                 if (key === "ArrowDown") {
-                    this.controls.down = true;
+                    this.controls.y = -1;
                 }
                 if (key === " ") {
                     Rune.actions.useItem();
@@ -671,16 +658,16 @@ export class GoDungeonGo implements Game {
             const myEntity = this.game.entities.find(e => e.id === this.playerId);
             if (myEntity) {
                 if (key === "ArrowLeft") {
-                    this.controls.left = false;
+                    this.controls.x = 0;
                 }
                 if (key === "ArrowRight") {
-                    this.controls.right = false;
+                    this.controls.x = 0;
                 }
                 if (key === "ArrowUp") {
-                    this.controls.up = false;
+                    this.controls.y = 0;
                 }
                 if (key === "ArrowDown") {
-                    this.controls.down = false;
+                    this.controls.y = 0;
                 }
             }
         }

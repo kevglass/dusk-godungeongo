@@ -253,20 +253,18 @@ Rune.initLogic({
     applyControls: (controls: Controls, context) => {
       const playerEntity = context.game.entities.find(e => e.id === context.playerId);
       if (playerEntity) {
-        playerEntity.controls.left = controls.left;
-        playerEntity.controls.right = controls.right;
-        playerEntity.controls.up = controls.up;
-        playerEntity.controls.down = controls.down;
+        playerEntity.controls.x = controls.x;
+        playerEntity.controls.y = controls.y;
 
-        if (controls.left || controls.right || controls.up || controls.down) {
+        if (controls.x !== 0 || controls.y !== 0) {
           playerEntity.anim = RUN;
         } else {
           playerEntity.anim = IDLE;
         }
 
-        if (controls.left) {
+        if (controls.x < 0) {
           playerEntity.faceLeft = true;
-        } else if (controls.right) {
+        } else if (controls.x > 0) {
           playerEntity.faceLeft = false;
         }
       }
