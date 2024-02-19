@@ -141,12 +141,12 @@ export class EntitySprite {
             const lastX = controls.x * 5; 
             const lastY = -controls.y * 5;
 
-            this.lastFrames.push({
-                x: (x + lastX) / 2, y: (y + lastY) / 2, dieAt: Rune.gameTime() + PUFF_TIME,
-                size: 5 + Math.floor(Math.random() * 7), offset: -1 + Math.floor(Math.random() * 3),
-                speedCol: SPEED_PUFF_COLORS[Math.floor(Math.random() * PUFF_COLORS.length)],
-                col: PUFF_COLORS[Math.floor(Math.random() * PUFF_COLORS.length)]
-            });
+            // this.lastFrames.push({
+            //     x: (x + lastX) / 2, y: (y + lastY) / 2, dieAt: Rune.gameTime() + PUFF_TIME,
+            //     size: 5 + Math.floor(Math.random() * 7), offset: -1 + Math.floor(Math.random() * 3),
+            //     speedCol: SPEED_PUFF_COLORS[Math.floor(Math.random() * PUFF_COLORS.length)],
+            //     col: PUFF_COLORS[Math.floor(Math.random() * PUFF_COLORS.length)]
+            // });
             this.lastFrames.push({
                 x: x, y: y, dieAt: Rune.gameTime() + PUFF_TIME,
                 size: 5 + Math.floor(Math.random() * 7), offset: -1 + Math.floor(Math.random() * 3),
