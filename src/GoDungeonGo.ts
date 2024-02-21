@@ -23,10 +23,8 @@ import { Controls, Entity, EntityType, RUN } from "./entity";
 import { Direction, Room, inRoomSpace } from "./room";
 import { Interpolator, Players } from "rune-games-sdk";
 import nipplejs, { JoystickManager } from 'nipplejs';
-import { Game, Sound, TileSet, graphics, sound } from "togl";
+import { graphics, sound } from "togl";
 import { intersects } from "./util";
-import { GameImage, RendererType } from "togl";
-import { GameFont, Offscreen } from "togl";
 
 
 // a predictable random used to generate the random
@@ -161,7 +159,7 @@ export class LocalRoom {
     // The fade in alpha value for the room appearing
     fade = 0;
     // offscreen where the image of the room is cached
-    offscreen?: Offscreen;
+    offscreen?: graphics.Offscreen;
     // item that was renderered
     item?: string;
     // has all keys
@@ -193,15 +191,15 @@ interface CollectEffect {
 // As players explore the mini-map updates for everyone, so the first player to find 
 // the gold key has also given it's location away to the other players etc.
 //
-export class GoDungeonGo implements Game {
+export class GoDungeonGo implements graphics.Game {
     // 2x scaled up versions of the tile set, saves us doing any scaling manipulation
     // at runtime.
-    tiles2x: TileSet;
+    tiles2x: graphics.TileSet;
     // The tile set being used to render the game
-    tiles: TileSet;
+    tiles: graphics.TileSet;
     // A red tinted version of the tiles used when someone gets hurt. Again saves run
     // time tinting.
-    tilesRed: TileSet;
+    tilesRed: graphics.TileSet;
 
     // The latest game state received 
     game?: GameState;
@@ -229,9 +227,9 @@ export class GoDungeonGo implements Game {
     // The list of players that joined the Rune room
     players?: Players;
     // The images for the avatars provided by Rune
-    avatarImages: Record<string, GameImage> = {}
+    avatarImages: Record<string, graphics.GameImage> = {}
     // The game logo 
-    logo: GameImage;
+    logo: graphics.GameImage;
 
     // the character the player has selected
     selectedType: EntityType = EntityType.PINK_KNIGHT;
@@ -244,36 +242,36 @@ export class GoDungeonGo implements Game {
     // the list of pick up effects that are currently rendered. 
     effects: CollectEffect[] = [];
 
-    // sound for picking up a key
-    sfxKey: Sound;
-    // sound for collecting an item
-    sfxCollect: Sound;
-    // sound for the countdown beeps
-    sfxCountdown: Sound;
-    // sound for when we win
-    sfxWin: Sound;
-    // sound for when we run out of time
-    sfxFail: Sound;
-    // sound for a player death
-    sfxDead: Sound;
-    // sound for a player getting hurt
-    sfxHurt: Sound;
-    // sound for when a player drinks a heal potion
-    sfxHealUp: Sound;
-    // sound for when a player drinks a speed potion
-    sfxSpeedUp: Sound;
+    // sound.Sound for picking up a key
+    sfxKey: sound.Sound;
+    // sound.Sound for collecting an item
+    sfxCollect: sound.Sound;
+    // sound.Sound for the countdown beeps
+    sfxCountdown: sound.Sound;
+    // sound.Sound for when we win
+    sfxWin: sound.Sound;
+    // sound.Sound for when we run out of time
+    sfxFail: sound.Sound;
+    // sound.Sound for a player death
+    sfxDead: sound.Sound;
+    // sound.Sound for a player getting hurt
+    sfxHurt: sound.Sound;
+    // sound.Sound for when a player drinks a heal potion
+    sfxHealUp: sound.Sound;
+    // sound.Sound for when a player drinks a speed potion
+    sfxSpeedUp: sound.Sound;
 
-    font10Black: GameFont;
-    font10White: GameFont;
-    font50Red: GameFont;
-    font20White: GameFont;
-    font50White: GameFont;
+    font10Black: graphics.GameFont;
+    font10White: graphics.GameFont;
+    font50Red: graphics.GameFont;
+    font20White: graphics.GameFont;
+    font50White: graphics.GameFont;
 
-    blueHalfCircle: GameImage;
-    whiteHalfCircle: GameImage;
-    greenCircle: GameImage;
-    redCircle: GameImage;
-    whiteCircle: GameImage;
+    blueHalfCircle: graphics.GameImage;
+    whiteHalfCircle: graphics.GameImage;
+    greenCircle: graphics.GameImage;
+    redCircle: graphics.GameImage;
+    whiteCircle: graphics.GameImage;
 
     // joystick
     joystick?: JoystickManager;
@@ -292,11 +290,11 @@ export class GoDungeonGo implements Game {
 
     lastControlsSent = 0;
     roomsDrawn = 0;
-    minimap?: Offscreen;
+    minimap?: graphics.Offscreen;
 
     constructor() {
         // load all the resources
-        graphics.init(RendererType.WEBGL, true);
+        graphics.init(graphics.RendererType.WEBGL, true);
 
         this.font10Black = graphics.generateFont(10, "black");
         this.font10White = graphics.generateFont(10, "white");
@@ -427,13 +425,13 @@ export class GoDungeonGo implements Game {
                     sound.playSound(this.sfxCountdown);
                 }, 1000);
             }
-            // if we used a speed potion play the sound
+            // if we used a speed potion play the sound.Sound
             if (event.type === GameEventType.SPEED_UP) {
                 if (event.who === this.playerId) {
                     sound.playSound(this.sfxSpeedUp);
                 }
             }
-            // if we used a heal potion play the sound
+            // if we used a heal potion play the sound.Sound
             if (event.type === GameEventType.HEAL_UP) {
                 if (event.who === this.playerId) {
                     sound.playSound(this.sfxHealUp);
