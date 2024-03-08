@@ -291,6 +291,7 @@ export class GoDungeonGo implements graphics.Game {
     lastControlsSent = 0;
     roomsDrawn = 0;
     minimap?: graphics.Offscreen;
+    isSpectator = false;
 
     constructor() {
         // load all the resources
@@ -381,6 +382,13 @@ export class GoDungeonGo implements graphics.Game {
 
     // notification of a new game state from the Rune SDK
     gameUpdate(update: GameUpdate) {
+        if (update.yourPlayerId === undefined) {
+            this.isSpectator = true;
+            const controls = document.getElementById("joystick");
+            if (controls) {
+                controls.style.display = "none";
+            }
+        }
         // process any events that have taken place
         for (const event of update.game.events) {
             // when the game restart we need to clear up our 
@@ -937,9 +945,15 @@ export class GoDungeonGo implements graphics.Game {
         this.controlVerticalPadding = this.controlSize;
 
         if (this.game) {
-            if (this.joined) {
+            if (this.joined || this.isSpectator) {
                 // simple player camera tracking
-                const myEntity = this.game.entities.find(e => e.id === this.playerId)
+                let myEntity = this.game.entities.find(e => e.id === this.playerId);
+                if (!myEntity) {
+                    const players = this.game.entities.filter(e => e.type !== EntityType.MONSTER);
+                    if (players.length > 0) {
+                        myEntity = players[0];
+                    }
+                }
                 if (myEntity) {
                     const sprite = this.entitySprites[myEntity.id];
                     const pos = sprite.interpolator.getPosition();
@@ -1231,33 +1245,37 @@ export class GoDungeonGo implements graphics.Game {
                 }
                 graphics.drawImage(this.logo, Math.floor((graphics.width() - width) / 2), 10, width, height);
 
-                const selectedIndex = this.typeOptions.indexOf(this.selectedType);
-                for (const type of this.typeOptions) {
-                    const x = ((graphics.width() / 2) - 32) - (selectedIndex * 70) + (this.typeOptions.indexOf(type) * 70);
-                    const y = 200;
-                    let frameOffset = 0;
+                if (!this.isSpectator) {
+                    const selectedIndex = this.typeOptions.indexOf(this.selectedType);
+                    for (const type of this.typeOptions) {
+                        const x = ((graphics.width() / 2) - 32) - (selectedIndex * 70) + (this.typeOptions.indexOf(type) * 70);
+                        const y = 200;
+                        let frameOffset = 0;
 
-                    if (type !== this.selectedType) {
-                        graphics.alpha(0.25);
-                    } else {
-                        frameOffset = frameIndex;
+                        if (type !== this.selectedType) {
+                            graphics.alpha(0.25);
+                        } else {
+                            frameOffset = frameIndex;
+                        }
+                        graphics.drawTile(this.tiles2x, x, y, type + frameOffset);
+                        graphics.drawTile(this.tiles2x, x, y + 64, type + 16 + frameOffset);
+                        graphics.alpha(1);
                     }
-                    graphics.drawTile(this.tiles2x, x, y, type + frameOffset);
-                    graphics.drawTile(this.tiles2x, x, y + 64, type + 16 + frameOffset);
-                    graphics.alpha(1);
+
+                    graphics.drawTile(this.tiles2x, 20, 250, 54);
+                    graphics.drawTile(this.tiles2x, graphics.width() - 64 - 20, 250, 70);
+
+
+                    graphics.drawTile(this.tiles2x, Math.floor(graphics.width() / 2) - 64 - 32, 350, 55);
+                    graphics.drawTile(this.tiles2x, Math.floor(graphics.width() / 2) - 32, 350, 56);
+                    graphics.drawTile(this.tiles2x, Math.floor(graphics.width() / 2) + 64 - 32, 350, 57);
+                    graphics.drawText(Math.floor((graphics.width() - graphics.textWidth("Play!", this.font20White)) / 2), 388, "Play!", this.font20White);
+                    const name = CHAR_NAMES[this.selectedType];
+                    graphics.drawText(Math.floor((graphics.width() - graphics.textWidth(name, this.font20White)) / 2), 230, name, this.font20White);
+                } else {
+                    graphics.drawText(Math.floor((graphics.width() - graphics.textWidth("Waiting for Start", this.font20White)) / 2), 388, "Play!", this.font20White);
+            
                 }
-
-                graphics.drawTile(this.tiles2x, 20, 250, 54);
-                graphics.drawTile(this.tiles2x, graphics.width() - 64 - 20, 250, 70);
-
-
-                graphics.drawTile(this.tiles2x, Math.floor(graphics.width() / 2) - 64 - 32, 350, 55);
-                graphics.drawTile(this.tiles2x, Math.floor(graphics.width() / 2) - 32, 350, 56);
-                graphics.drawTile(this.tiles2x, Math.floor(graphics.width() / 2) + 64 - 32, 350, 57);
-                graphics.drawText(Math.floor((graphics.width() - graphics.textWidth("Play!", this.font20White)) / 2), 388, "Play!", this.font20White);
-
-                const name = CHAR_NAMES[this.selectedType];
-                graphics.drawText(Math.floor((graphics.width() - graphics.textWidth(name, this.font20White)) / 2), 230, name, this.font20White);
             }
 
             const versionString = "1.03";
@@ -1271,8 +1289,10 @@ export class GoDungeonGo implements graphics.Game {
 
         // TODO use sprite
         // graphics.fillCircle(graphics.width() - (this.controlSize / 2) - this.controlHorizontalPadding, +this.controlSize / 2, this.controlSize / 2, "white");
-        graphics.drawImage(this.whiteCircle,  graphics.width() - (this.controlSize) - this.controlHorizontalPadding, 0, this.controlSize, this.controlSize);
-
+        if (!this.isSpectator) {
+            graphics.drawImage(this.whiteCircle,  graphics.width() - (this.controlSize) - this.controlHorizontalPadding, 0, this.controlSize, this.controlSize);
+        }
+        
         graphics.alpha(0.8);
         if (this.game) {
             const myEntity = this.game.entities.find(e => e.id === this.playerId);
