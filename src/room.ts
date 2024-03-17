@@ -90,18 +90,18 @@ export function generateDungeon(state: GameState): void {
         const fromRooms = state.rooms.filter(r => r !== eggRoom || state.rooms.length === 1).filter(r => Object.values(r.connections).length < 4);
         const fromRoom = fromRooms[Math.floor(Math.random() * fromRooms.length)];
         const possibleDirections = [];
-        if (!fromRoom.connections[Direction.NORTH]) {
-            possibleDirections.push(Direction.NORTH);
-        }
+        // if (!fromRoom.connections[Direction.NORTH]) {
+        //     possibleDirections.push(Direction.NORTH);
+        // }
         if (!fromRoom.connections[Direction.SOUTH]) {
             possibleDirections.push(Direction.SOUTH);
         }
-        if (!fromRoom.connections[Direction.WEST]) {
-            possibleDirections.push(Direction.WEST);
-        }
-        if (!fromRoom.connections[Direction.EAST]) {
-            possibleDirections.push(Direction.EAST);
-        }
+        // if (!fromRoom.connections[Direction.WEST]) {
+        //     possibleDirections.push(Direction.WEST);
+        // }
+        // if (!fromRoom.connections[Direction.EAST]) {
+        //     possibleDirections.push(Direction.EAST);
+        // }
 
         // pick a random valid direction and generate a room 
         // in the right location
@@ -380,7 +380,7 @@ export function blockedLocationInRoom(state: GameState, x: number, y: number, ha
     }
     // if we don't have a key then we can't use the door
     if (!hasAllKeys) {
-        if (room.doors[Direction.NORTH] && yp > room.y + 1) {
+        if (room.doors[Direction.NORTH] && yp < room.y + 1) {
             return true;
         }
         if (room.doors[Direction.SOUTH] && yp >= room.y + room.height) {
