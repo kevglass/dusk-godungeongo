@@ -23,7 +23,7 @@ import { Controls, Entity, EntityType, RUN } from "./entity";
 import { Direction, Room, inRoomSpace } from "./room";
 import { Interpolator, Players } from "rune-games-sdk";
 import nipplejs, { JoystickManager } from 'nipplejs';
-import { graphics, sound } from "togl";
+import { graphics, sound } from "toglib";
 import { intersects } from "./util";
 
 
