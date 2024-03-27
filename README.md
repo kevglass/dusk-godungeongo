@@ -2,6 +2,8 @@
 
 ![preview](https://github.com/kevglass/rune-godungeongo/assets/3787210/9b3b2ef4-f0a7-4759-ab9d-6ae2340d8159)
 
+_All game assets are licensed for use in these projects. They remain copyright of their authors._
+
 This is a rough hack up making using the Rune.ai SDK (https://rune.ai). I wanted to see what its all about and ended up recreating one of my dungeon games.
 
 I make no apology for how raw the client rendering code is - I just went for it!
