@@ -1,18 +1,18 @@
 # Go Dungeon Go!
 
-![preview](https://github.com/kevglass/rune-godungeongo/assets/3787210/9b3b2ef4-f0a7-4759-ab9d-6ae2340d8159)
+![preview](https://github.com/kevglass/dusk-godungeongo/assets/3787210/9b3b2ef4-f0a7-4759-ab9d-6ae2340d8159)
 
 _All game assets are licensed for use in these projects. They remain copyright of their authors._
 
-_You can find the rest of my rune games here https://github.com/kevglass/rune-games_
+_You can find the rest of my dusk games here https://github.com/kevglass/dusk-games_
 
-This is a rough hack up making using the Rune.ai SDK (https://rune.ai). I wanted to see what its all about and ended up recreating one of my dungeon games.
+This is a rough hack up making using the Dusk SDK (https://dusk.gg). I wanted to see what its all about and ended up recreating one of my dungeon games.
 
 I make no apology for how raw the client rendering code is - I just went for it!
 
 This one is about real time racing through a dungeon.
 
-![image](https://github.com/kevglass/rune-godungeongo/assets/3787210/336ba40c-e7cb-4158-a56b-cc70d5a6f449)
+![image](https://github.com/kevglass/dusk-godungeongo/assets/3787210/336ba40c-e7cb-4158-a56b-cc70d5a6f449)
 
 ## How to Play
 
@@ -31,4 +31,4 @@ Have fun!
 * Code - Me (cokeandcode)
 * Sounds - Various CC0 sources
 * Art - Dungeon Tileset II - 0x72 - https://0x72.itch.io/dungeontileset-ii
-* Multiplayer Platform and Framework - https://rune.ai 
+* Multiplayer Platform and Framework - https://dusk.gg
