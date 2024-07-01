@@ -1,4 +1,4 @@
-import type { PlayerId, Players, DuskClient, OnChangeParams } from "dusk-games-sdk"
+import type { PlayerId, DuskClient, OnChangeParams } from "dusk-games-sdk"
 import { Controls, Entity, EntityType, IDLE, RUN, createEntity, updateEntity } from "./entity";
 import { Room, closeToCenter, findRoomAt, generateDungeon } from "./room";
 
