@@ -1,4 +1,4 @@
-import type { PlayerId, DuskClient, OnChangeParams } from "dusk-games-sdk"
+import type { PlayerId, RuneClient, OnChangeParams } from "rune-sdk"
 import { Controls, Entity, EntityType, IDLE, RUN, createEntity, updateEntity } from "./entity";
 import { Room, closeToCenter, findRoomAt, generateDungeon } from "./room";
 
@@ -119,7 +119,7 @@ type GameActions = {
 }
 
 declare global {
-  const Dusk: DuskClient<GameState, GameActions>
+  const Rune: RuneClient<GameState, GameActions>
 }
 
 // Get the state of a spike at a given location. This is a deterministic
@@ -162,7 +162,7 @@ function respawn(state: GameState, entity: Entity) {
     newPlayer.bronzeKey = entity.bronzeKey;
     newPlayer.goldKey = entity.goldKey;
     newPlayer.silverKey = entity.silverKey;
-    newPlayer.respawnedAt = Dusk.gameTime();
+    newPlayer.respawnedAt = Rune.gameTime();
   }
 }
 
@@ -204,7 +204,7 @@ function startGame(state: GameState) {
   state.events.push({ type: GameEventType.RESTART });
 }
 
-Dusk.initLogic({
+Rune.initLogic({
   minPlayers: 1,
   maxPlayers: 4,
   reactive: false,
@@ -271,7 +271,7 @@ Dusk.initLogic({
           context.game.events.push({ type: GameEventType.HEAL_UP, who: context.playerId });
         }
         if (playerEntity.item === "speed") {
-          playerEntity.speedTimeout = Dusk.gameTime() + (1000 * 15);
+          playerEntity.speedTimeout = Rune.gameTime() + (1000 * 15);
           playerEntity.speed = 15;
           playerEntity.item = undefined;
           context.game.events.push({ type: GameEventType.SPEED_UP, who: context.playerId });
@@ -296,15 +296,15 @@ Dusk.initLogic({
     context.game.events = [];
 
     // if we've shown the game over message for long enough then reset the game
-    if (context.game.gameOver && Dusk.gameTime() - context.game.gameOverTime > 5000) {
+    if (context.game.gameOver && Rune.gameTime() - context.game.gameOverTime > 5000) {
       startGame(context.game);
       return;
     }
     // time ran out, nobody wins
-    if (!context.game.atStart && !context.game.gameOver && context.game.endGameTime < Dusk.gameTime()) {
+    if (!context.game.atStart && !context.game.gameOver && context.game.endGameTime < Rune.gameTime()) {
       context.game.winner = undefined;
       context.game.gameOver = true;
-      context.game.gameOverTime = Dusk.gameTime();
+      context.game.gameOverTime = Rune.gameTime();
       context.game.events.push({ type: GameEventType.TIME_OUT });
       return;
     }
@@ -322,14 +322,14 @@ Dusk.initLogic({
     if (context.game.atStart && getPlayerCount(context.game) >= minPlayers) {
       // start the kick off timer
       if (context.game.startRace === 0) {
-        context.game.startRace = Dusk.gameTime() + 5000;
+        context.game.startRace = Rune.gameTime() + 5000;
         context.game.events.push({ type: GameEventType.START_COUNTDOWN });
       } else {
-        const remaining = context.game.startRace - Dusk.gameTime();
+        const remaining = context.game.startRace - Rune.gameTime();
         if (remaining < 0) {
           // START!
           context.game.atStart = false;
-          context.game.endGameTime = Dusk.gameTime() + (60 * 1000 * ROUND_TIME_MINS);
+          context.game.endGameTime = Rune.gameTime() + (60 * 1000 * ROUND_TIME_MINS);
         } else {
           const secondsLeft = Math.floor(remaining / 1000) + 1;
           context.game.statusMessage = "Get Ready!";
@@ -340,7 +340,7 @@ Dusk.initLogic({
 
     let fireDiscovery = true;
     for (const entity of context.game.entities.filter(e => e.type !== EntityType.MONSTER)) {
-      updateEntity(Dusk.gameTime(), context.game, entity, 1);
+      updateEntity(Rune.gameTime(), context.game, entity, 1);
       const room = findRoomAt(context.game, entity.x, entity.y);
 
       if (room) {
@@ -397,7 +397,7 @@ Dusk.initLogic({
                   context.game.scores[entity.id] += 7;
                   context.game.winner = entity.id;
                   context.game.gameOver = true;
-                  context.game.gameOverTime = Dusk.gameTime();
+                  context.game.gameOverTime = Rune.gameTime();
                   context.game.events.push({ type: GameEventType.WIN });
                 }
                 break;
@@ -414,20 +414,20 @@ Dusk.initLogic({
     // // update all the monster entities with a flat 1 step update since they
     // // don't do collision
     for (const entity of context.game.entities.filter(e => e.type === EntityType.MONSTER)) {
-      updateEntity(Dusk.gameTime(), context.game, entity, 1);
+      updateEntity(Rune.gameTime(), context.game, entity, 1);
     }
 
     // check to see if the players are hitting anything that can hurt them 
     // if they are apply the health change and potential respawn
     for (const entity of context.game.entities.filter(e => e.type !== EntityType.MONSTER)) {
       // have to wait a second if you respawn
-      if (Dusk.gameTime() < entity.respawnedAt + 2000) {
+      if (Rune.gameTime() < entity.respawnedAt + 2000) {
         continue;
       }
 
       // players can only be hurt every couple of seconds. They'll go into the traditional 
       // flashing state while in grace
-      if (Dusk.gameTime() - entity.hurtAt > HURT_GRACE) {
+      if (Rune.gameTime() - entity.hurtAt > HURT_GRACE) {
         const room = findRoomAt(context.game, entity.x, entity.y);
   
         // find any monsters that are close enough to damage the player - if there
@@ -440,7 +440,7 @@ Dusk.initLogic({
             respawn(context.game, entity);
             continue;
           } else {
-            entity.hurtAt = Dusk.gameTime();
+            entity.hurtAt = Rune.gameTime();
             context.game.events.push({ type: GameEventType.HURT, who: entity.id });
           }
         }
@@ -454,14 +454,14 @@ Dusk.initLogic({
           const spikeAtLocation = room.spikeLocations.find(l => l.x === tileX && l.y === tileY);
           if (spikeAtLocation) {
             // only get spiked on full up
-            if (getSpikeState(spikeAtLocation.x + room.x, spikeAtLocation.y + room.y, Dusk.gameTime()) === 3) {
+            if (getSpikeState(spikeAtLocation.x + room.x, spikeAtLocation.y + room.y, Rune.gameTime()) === 3) {
               entity.health--;
               if (entity.health <= 0) {
                 context.game.events.push({ type: GameEventType.DEATH, who: entity.id });
                 respawn(context.game, entity);
                 continue;
               } else {
-                entity.hurtAt = Dusk.gameTime();
+                entity.hurtAt = Rune.gameTime();
                 context.game.events.push({ type: GameEventType.HURT, who: entity.id });
               }
             }

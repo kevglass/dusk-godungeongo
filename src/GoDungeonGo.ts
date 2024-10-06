@@ -21,7 +21,7 @@ import gfxGreenCircle from "./assets/greencircle.png";
 
 import { Controls, Entity, EntityType, RUN } from "./entity";
 import { Direction, Room, inRoomSpace } from "./room";
-import { Interpolator, Players } from "dusk-games-sdk";
+import { Interpolator, Players } from "rune-sdk";
 import nipplejs, { JoystickManager } from 'nipplejs';
 import { graphics, sound } from "toglib";
 import { intersects } from "./util";
@@ -127,7 +127,7 @@ export class EntitySprite {
     lastFrames: Puff[] = [];
 
     constructor(localPlayer: boolean) {
-        this.interpolator = localPlayer ? Dusk.interpolator() : Dusk.interpolatorLatency({ maxSpeed: 15 })
+        this.interpolator = localPlayer ? Rune.interpolator() : Rune.interpolatorLatency({ maxSpeed: 15 })
     }
 
     update(x: number, y: number, controls: Controls) {
@@ -137,13 +137,13 @@ export class EntitySprite {
 
         if (controlsDown) {
             this.lastFrames.push({
-                x: x, y: y, dieAt: Dusk.gameTime() + PUFF_TIME,
+                x: x, y: y, dieAt: Rune.gameTime() + PUFF_TIME,
                 size: 5 + Math.floor(Math.random() * 7), offset: -1 + Math.floor(Math.random() * 3),
                 speedCol: SPEED_PUFF_COLORS[Math.floor(Math.random() * PUFF_COLORS.length)],
                 col: PUFF_COLORS[Math.floor(Math.random() * PUFF_COLORS.length)]
             });
         }
-        this.lastFrames = this.lastFrames.filter(f => f.dieAt > Dusk.gameTime());
+        this.lastFrames = this.lastFrames.filter(f => f.dieAt > Rune.gameTime());
     }
 }
 
@@ -346,7 +346,7 @@ export class GoDungeonGo implements graphics.Game {
     resourcesLoaded(): void {
         // tell rune to let us know when a game
         // update happens
-        Dusk.initClient({
+        Rune.initClient({
             onChange: (update) => {
                 this.gameUpdate(update);
             },
@@ -571,7 +571,7 @@ export class GoDungeonGo implements graphics.Game {
         if (this.game && Date.now() - this.lastControlsSent > 1000 / 8) {
             if ((this.lastActionedControls.x !== this.controls.x) ||
                 (this.lastActionedControls.y !== this.controls.y)) {
-                Dusk.actions.applyControls({ ...this.controls });
+                Rune.actions.applyControls({ ...this.controls });
                 this.lastActionedControls = { ...this.controls };
                 this.lastControlsSent = Date.now();
             }
@@ -584,7 +584,7 @@ export class GoDungeonGo implements graphics.Game {
             const controlsY = graphics.height() - this.controlSize - this.controlVerticalPadding;
 
             if (intersects(x, y, graphics.width() - this.controlSize - this.controlHorizontalPadding, controlsY, this.controlSize, this.controlSize)) {
-                Dusk.actions.useItem();
+                Rune.actions.useItem();
             }
         }
     }
@@ -617,7 +617,7 @@ export class GoDungeonGo implements graphics.Game {
 
                 this.selectedType = this.typeOptions[index];
             } else if (y > 350) {
-                Dusk.actions.join({ type: this.selectedType });
+                Rune.actions.join({ type: this.selectedType });
                 this.joined = true;
             }
         }
@@ -642,7 +642,7 @@ export class GoDungeonGo implements graphics.Game {
                     this.controls.y = -1;
                 }
                 if (key === " ") {
-                    Dusk.actions.useItem();
+                    Rune.actions.useItem();
                 }
             }
         }
@@ -876,7 +876,7 @@ export class GoDungeonGo implements graphics.Game {
                 for (const location of room.spikeLocations) {
                     // get the spike state and render the appropriate sprite to have
                     // the spikes popping in and out
-                    const frame = getSpikeState(location.x + room.x, location.y + room.y, Dusk.gameTime());
+                    const frame = getSpikeState(location.x + room.x, location.y + room.y, Rune.gameTime());
                     graphics.drawTile(this.tiles, location.x * 32, location.y * 32, 176 + frame);
                 }
             }
@@ -1033,7 +1033,7 @@ export class GoDungeonGo implements graphics.Game {
                             // draw the smoke/dust trail for running fast!
                             if (entity.type !== EntityType.MONSTER) {
                                 for (const puff of sprite.lastFrames) {
-                                    const remaining = puff.dieAt - Dusk.gameTime();
+                                    const remaining = puff.dieAt - Rune.gameTime();
                                     if (remaining > PUFF_TIME * 0.9) {
                                         continue;
                                     }
@@ -1061,9 +1061,9 @@ export class GoDungeonGo implements graphics.Game {
                             }
 
                             graphics.translate(16, 16);
-                            if (Dusk.gameTime() < entity.respawnedAt + 1000) {
+                            if (Rune.gameTime() < entity.respawnedAt + 1000) {
                                 // respawn in place, do the effect
-                                let delta = 1 - (((entity.respawnedAt + 1000) - Dusk.gameTime()) / 1000);
+                                let delta = 1 - (((entity.respawnedAt + 1000) - Rune.gameTime()) / 1000);
                                 if (delta > 0.5) {
                                     delta = (delta - 0.5) / 0.5;
                                     graphics.alpha(delta);
@@ -1075,8 +1075,8 @@ export class GoDungeonGo implements graphics.Game {
                             }
                             let tiles = this.tiles;
                             // use the red set if the player is hurt
-                            if (Dusk.gameTime() - entity.hurtAt < HURT_GRACE) {
-                                const sinceHurt = Dusk.gameTime() - entity.hurtAt;
+                            if (Rune.gameTime() - entity.hurtAt < HURT_GRACE) {
+                                const sinceHurt = Rune.gameTime() - entity.hurtAt;
                                 if (Math.floor(sinceHurt / 200) % 2 === 0) {
                                     tiles = this.tilesRed;
                                 }
@@ -1179,7 +1179,7 @@ export class GoDungeonGo implements graphics.Game {
                         graphics.alpha(1);
                         graphics.drawText(Math.floor(graphics.width() - graphics.textWidth(this.game.countDown + "", this.font50White)) / 2, 280, this.game.countDown + "", this.font50White);
                     }
-                } else if (Dusk.gameTime() - this.game.startRace < 1000 && Dusk.gameTime() - this.game.startRace > 0) {
+                } else if (Rune.gameTime() - this.game.startRace < 1000 && Rune.gameTime() - this.game.startRace > 0) {
                     graphics.fillRect(0, 130, graphics.width(), 100, "rgba(0,0,0,0.5)");
                     graphics.drawText(Math.floor(graphics.width() - graphics.textWidth("Find the Keys! First to the Egg!", this.font20White)) / 2, 160, "Find the Keys! First to the Egg!", this.font20White);
                     graphics.alpha(0.8);
@@ -1198,7 +1198,7 @@ export class GoDungeonGo implements graphics.Game {
                 }
                 // draw the HUD for keys and health
                 if (this.game && !this.game.atStart && !this.game.gameOver) {
-                    const remaining = Math.max(0, this.game.endGameTime - Dusk.gameTime());
+                    const remaining = Math.max(0, this.game.endGameTime - Rune.gameTime());
                     const seconds = Math.floor(remaining / 1000) % 60;
                     const minutes = Math.floor(Math.floor(remaining / 1000) / 60);
                     let timeStr = minutes + ":";
